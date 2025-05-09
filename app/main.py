@@ -416,11 +416,13 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
     # ① Price & Trades --------------------------------------------------------
     st.subheader("📉 Price & Trades")
     fig_pt = go.Figure()
+    fig_pt = go.Figure()
     fig_pt.add_trace(go.Scatter(x=price_series.index, y=price_series, mode="lines", name="Price"))
 
     if not trades_df.empty:
-        buys = trades_df[trades_df.get("side", "").str.upper() == "BUY"]
-        sells = trades_df[trades_df.get("side", "").str.upper() == "SELL"]
+        print("entry_side", trades_df.get("entry_side", "").str.upper())
+        buys = trades_df[trades_df.get("entry_side", "").str.upper() == "LONG"]
+        sells = trades_df[trades_df.get("entry_side", "").str.upper() == "SELL"]
 
         if not buys.empty:
             fig_pt.add_trace(
