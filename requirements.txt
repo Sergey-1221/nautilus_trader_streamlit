@@ -1,3 +1,7 @@
+-i https://packages.nautechsystems.io/simple
+--extra-index-url https://pypi.org/simple
+--only-binary=nautilus-trader
+
 wheel
 streamlit
 pandas
