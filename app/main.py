@@ -48,6 +48,7 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
 from modules.strategy_loader import discover_strategies
 from modules.backtest_runner import run_backtest
 from modules.dashboard_actor import DashboardPublisher  # optional, only if supported
+from datetime import timedelta
 
 # ───────────────────────────── Streamlit page ────────────────────────────────
 st.set_page_config(page_title="NautilusTrader Dashboard", layout="wide")
@@ -291,127 +292,162 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
                 unsafe_allow_html=True,
             )
 
-    # ╭──────────────── SUMMARY KPI GRID ─────────────────────────────────────╮
-    st.markdown("## ⚡ Back‑test summary")
-    hdr = st.columns(4)
-    hdr[0].metric("Started",   _fmt_dt(run_meta["Run started"]))
-    hdr[1].metric("Finished",  _fmt_dt(run_meta["Run finished"]))
-    hdr[2].metric("Elapsed",   run_meta["Elapsed time"])
-    hdr[3].metric("Orders",    run_meta["Total orders"])
+    # ╭──────────────────── 💹 ACCOUNT & Performance ────────────────────────────╮
 
-    kcols = st.columns(len(kpi))
-    for (label, value), col in zip(kpi.items(), kcols):
-        text = (
-            "—"
-            if np.isnan(value)
-            else (
-                f"{value*100:.2f}%"
-                if "%" in label and ("PnL" in label or "DD" in label)
-                else f"{value:,.2f}"
-            )
-        )
-        color = NEG if (("PnL" in label and value < 0) or ("DD" in label and value > 0)) else ACCENT
-        col.markdown(
-            f"<span style='font-size:1.1rem;color:{color}'><b>{text}</b><br>{label}</span>",
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("---")
-
-    # ╭──────────────────── 💹 ACCOUNT & PERFORMANCE (TABS) ───────────────────╮
     with st.container(border=True):
-        st.subheader("💹 Account & Performance")
+        st.subheader("💹 Account & Performance")
+
+        # ------------------------------------------------------------------
+        # Date-range slider REMOVED at user request.
+        # We now analyse the entire back-test by default.
+        # ------------------------------------------------------------------
+        # If strategy_returns is empty, returns_view will also be empty,
+        # otherwise it will reference the full DataFrame.
+        returns_view = strategy_returns
+
+        # ── Tabs -----------------------------------------------------------
         perf_tabs = st.tabs([
-            "Balances & Fees",
-            "PnL",
-            "Return & Risk",
-            "General",
+            "Summary", "Balances & Fees", "PnL", "Return & Risk", "General",
         ])
 
-        # ── Tab 0: Balances & Fees ───────────────────────────────────────────
+        # ── Tab 0: Summary -------------------------------------------------
         with perf_tabs[0]:
-            bal_cols = st.columns(4)
-            initial_bal  = result.get("initial_balances", {"USDT": 10_000, "BTC": 1})
-            final_bal    = result.get("final_balances",   {"USDT": 9_872.05788320, "BTC": 1})
-            unrealised   = result.get("unrealised_pnl", None)
+            st.subheader("⚡ Back-test summary")
+            hdr = st.columns(4)
+            hdr[0].metric("Started", _fmt_dt(run_meta["Run started"]))
+            hdr[1].metric("Finished", _fmt_dt(run_meta["Run finished"]))
+            hdr[2].metric("Elapsed", run_meta["Elapsed time"])
+            hdr[3].metric("Orders", run_meta["Total orders"])
 
-            bal_cols[0].metric("Initial USDT", _fmt_usd(initial_bal.get("USDT")))
-            bal_cols[1].metric("Initial BTC",  _fmt_btc(initial_bal.get("BTC")))
-            bal_cols[2].metric("Final USDT",   _fmt_usd(final_bal.get("USDT")))
-            bal_cols[3].metric("Final BTC",    _fmt_btc(final_bal.get("BTC")))
+            # KPI grid using native Streamlit colouring
+            kcols = st.columns(len(kpi))
+            for (label, value), col in zip(kpi.items(), kcols):
+                is_pct = any(tok in label for tok in ("%", "PnL", "DD"))
+                if value is None or (isinstance(value, float) and np.isnan(value)):
+                    col.metric(label, "—", delta="")
+                    continue
+                text = f"{value:+.2%}" if is_pct else f"{value:+,.2f}"
+                dcol = "normal" if value > 0 else "inverse" if value < 0 else "off"
+                col.metric(label, text, delta=text, delta_color=dcol)
 
-            fee_cols = st.columns(2)
-            fee_cols[0].metric("Total fees", _fmt_usd(-comm_total if comm_total else None))
-            fee_cols[1].metric("Unrealised PnL", "None" if unrealised is None else f"{unrealised:+,.2f}")
-
-        # ── Tab 1: PnL statistics ────────────────────────────────────────────
+        # === Tab 1: PnL Details ==============================================================
         with perf_tabs[1]:
             pnl_metrics = result.get("metrics", {})
-            btc = pnl_metrics.get("btc", {})
-            usd = pnl_metrics.get("usdt", {})
+            btc, usd = pnl_metrics.get("btc", {}), pnl_metrics.get("usdt", {})
+
             pnl_cols = st.columns(4)
-            pnl_cols[0].metric("BTC PnL",   btc.get("total", "—"))
+            pnl_cols[0].metric("BTC PnL", btc.get("total", "—"))
             pnl_cols[1].metric("BTC PnL %", btc.get("pct", "—"))
-            pnl_cols[2].metric("USDT PnL",  usd.get("total", kpi["PnL ($)"]))
-            pnl_cols[3].metric("USDT PnL %", usd.get("pct", kpi["PnL (%)"]))
+            pnl_cols[2].metric("USDT PnL", usd.get("total", kpi.get("PnL ($)", "—")))
+            pnl_cols[3].metric("USDT PnL %", usd.get("pct", kpi.get("PnL (%)", "—")))
 
-            st.dataframe(
-                pd.DataFrame({
-                    "Metric": [
-                        "Max winner", "Avg winner", "Min winner",
-                        "Max loser",  "Avg loser",  "Min loser",
-                        "Expectancy", "Win rate",
-                    ],
-                    "BTC": [
-                        btc.get("max_win"), btc.get("avg_win"), btc.get("min_win"),
-                        btc.get("max_loss"), btc.get("avg_loss"), btc.get("min_loss"),
-                        btc.get("expectancy"), btc.get("win_rate"),
-                    ],
-                    "USDT": [
-                        usd.get("max_win"), usd.get("avg_win"), usd.get("min_win"),
-                        usd.get("max_loss"), usd.get("avg_loss"), usd.get("min_loss"),
-                        usd.get("expectancy"), usd.get("win_rate", kpi["Win Rate"]),
-                    ]
-                }).set_index("Metric"),
-                height=250,
-            )
+            # Raw PnL metrics under an expander ------------------------------------------------
+            with st.expander("Raw PnL metrics"):
+                pnl_df = pd.DataFrame(
+                    {
+                        "Metric": [
+                            "Max winner",
+                            "Avg winner",
+                            "Min winner",
+                            "Max loser",
+                            "Avg loser",
+                            "Min loser",
+                            "Expectancy",
+                            "Win rate",
+                        ],
+                        "BTC": [
+                            btc.get("max_win"),
+                            btc.get("avg_win"),
+                            btc.get("min_win"),
+                            btc.get("max_loss"),
+                            btc.get("avg_loss"),
+                            btc.get("min_loss"),
+                            btc.get("expectancy"),
+                            btc.get("win_rate"),
+                        ],
+                        "USDT": [
+                            usd.get("max_win"),
+                            usd.get("avg_win"),
+                            usd.get("min_win"),
+                            usd.get("max_loss"),
+                            usd.get("avg_loss"),
+                            usd.get("min_loss"),
+                            usd.get("expectancy"),
+                            usd.get("win_rate", kpi.get("Win Rate")),
+                        ],
+                    }
+                ).set_index("Metric")
+                st.dataframe(pnl_df, height=280)
 
-        # ── Tab 2: Return & Risk statistics ──────────────────────────────────
+        # === Tab 2: Return & Risk =============================================================
         with perf_tabs[2]:
-            if strategy_returns.empty:
+            if returns_view.empty:
                 st.info("Not enough data to compute return stats.")
             else:
                 ret_stats = {
-                    "Volatility (252d)":        kpi["Volatility (252d)"],
-                    "Avg daily return":         strategy_returns.mean(),
-                    "Avg loss (daily)":         strategy_returns[strategy_returns < 0].mean(),
-                    "Avg win (daily)":          strategy_returns[strategy_returns > 0].mean(),
-                    "Sharpe (252d)":            kpi["Sharpe"],
-                    "Sortino (252d)":           kpi["Sortino"],
-                    "Profit factor":            kpi["Profit Factor"],
-                    "Risk / Return": (
-                        abs(kpi["Max DD (%)"] / 100) / kpi["PnL (%)"]
-                        if not np.isnan(kpi["PnL (%)"]) and kpi["PnL (%)"] != 0
-                        else np.nan
+                    "Volatility (252d)": kpi.get("Volatility (252d)"),
+                    "Avg daily return": returns_view.mean(),
+                    "Avg loss (daily)": returns_view[returns_view < 0].mean(),
+                    "Avg win (daily)": returns_view[returns_view > 0].mean(),
+                    "Sharpe (252d)": kpi.get("Sharpe"),
+                    "Sortino (252d)": kpi.get("Sortino"),
+                    "Profit factor": kpi.get("Profit Factor"),
+                    "Risk / Return": (
+                        abs(kpi.get("Max DD (%)", np.nan)) / 100 / kpi.get("PnL (%)")
+                        if kpi.get("PnL (%)") not in (None, 0, np.nan) else np.nan
                     ),
                 }
-                rc1, rc2, rc3, rc4 = st.columns(4)
-                for (lbl, val), col in zip(ret_stats.items(), (rc1, rc2, rc3, rc4)*3):
-                    col.metric(lbl, "—" if np.isnan(val) else f"{val:,.4f}")
+                cols = st.columns(4)
+                for (lbl, val), col in zip(ret_stats.items(), cols * 2):
+                    if val is None or (isinstance(val, float) and np.isnan(val)):
+                        col.metric(lbl, "—")
+                        continue
 
-                st.dataframe(pd.Series(ret_stats, name="Value"))
+                    is_pct = "%" in lbl or lbl.endswith("(%)")
+                    formatted = f"{val:+.2%}" if is_pct else f"{val:+,.2f}"
+                    col.metric(lbl, formatted)
 
-        # ── Tab 3: General statistics ────────────────────────────────────────
+                # Distribution of daily returns -----------------------------------------------
+                st.markdown("##### Daily returns distribution")
+                st.bar_chart(returns_view, height=200)
+
+        # === Tab 3: Balances & Fees ===========================================================
         with perf_tabs[3]:
+            bal_cols = st.columns(4)
+            initial_bal = result.get("initial_balances", {"USDT": 10_000, "BTC": 1})
+            final_bal = result.get("final_balances", {"USDT": 9_872.06, "BTC": 1})
+            unrealised = result.get("unrealised_pnl")
+
+            bal_cols[0].metric("Initial USDT", _fmt_usd(initial_bal.get("USDT")))
+            bal_cols[1].metric("Initial BTC", _fmt_btc(initial_bal.get("BTC")))
+            bal_cols[2].metric("Final USDT", _fmt_usd(final_bal.get("USDT")))
+            bal_cols[3].metric("Final BTC", _fmt_btc(final_bal.get("BTC")))
+
+            fee_cols = st.columns(2)
+            fee_cols[0].metric("Total fees", _fmt_usd(-comm_total) if comm_total else "—")
+            fee_cols[1].metric(
+                "Unrealised PnL",
+                f"{unrealised:+,.2f}" if unrealised is not None else "—",
+            )
+
+        # === Tab 4: General statistics =======================================================
+        with perf_tabs[4]:
             long_ratio = result.get("long_ratio")
             if long_ratio is None and not trades_df.empty and "side" in trades_df:
                 long_ratio = (trades_df["side"].str.upper() == "BUY").mean()
 
-            st.metric("Long ratio", "—" if long_ratio is None else f"{long_ratio:.0%}")
-            st.metric("Positions", run_meta["Total positions"])
+            st.metric("Long ratio", f"{long_ratio:.0%}" if long_ratio is not None else "—")
+            st.metric("Positions", run_meta.get("Total positions", "—"))
             st.metric("Trades", len(trades_df) if not trades_df.empty else 0)
 
-    st.markdown("---")
+            # Trades log ----------------------------------------------------------------------
+            if not trades_df.empty:
+                with st.expander("Trades log"):
+                    st.dataframe(trades_df)
+
+
+
+
 
     # ① Price & Trades --------------------------------------------------------
     st.subheader("📉 Price & Trades")
