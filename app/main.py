@@ -672,7 +672,7 @@ with st.sidebar:
         else:
             params[field] = st.text_input(label, value=str(default or ""))
 
-    theme = st.selectbox("Theme", ["Dark", "Light"], index=0)
+    theme = "Light"
     TPL = "plotly_dark" if theme == "Dark" else "plotly_white"
     ACCENT, NEG = "#10B981", "#EF4444"
 
