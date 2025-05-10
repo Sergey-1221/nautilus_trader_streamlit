@@ -1,25 +1,4 @@
 # -*- coding: utf‑8 -*-
-"""
-Combined NautilusTrader back‑test dashboard + “Universal Back‑test Dashboard”
-visual components — **single file, ready to run**.
-
-Run from project root::
-
-    streamlit run main_dashboard.py
-
-Key enhancements (v3)
---------------------
-1. **Run metadata** block restyled with a soft‑grey background and the unique run
-   ID injected directly into the expander title for instant traceability.
-2. **Unified “💹 Account & Performance” section**: the former independent blocks
-   (💰 Balances & Fees, 📈 PnL statistics, 📊 Return / Risk, ⚖ General stats,
-   Back‑test KPI grid) are now presented as four easy‑to‑navigate **tabs** inside
-   a single bordered container — keeping the screen tidy while letting users
-   focus on what matters.
-3. Each tab leverages `st.metric` grids for compact, colour‑coded visualisation
-   of key numbers, plus sparklines or data frames where helpful.
-4. All comments remain **English‑only** and the file stays self‑contained.
-"""
 
 from __future__ import annotations
 
@@ -42,6 +21,8 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from st_aggrid import AgGrid, GridOptionsBuilder
+import altair as alt
 
 # ────────────────────────────── local code ───────────────────────────────────
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
@@ -70,7 +51,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("NautilusTrader — live / back‑test dashboard")
+st.title("NautilusTrader — dashboard")
 
 # ╭──────────────────────── helper utilities ─────────────────────────────────╮
 def is_simple(v: Any) -> bool:
@@ -269,7 +250,7 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
 
     # ╭──────────────────── 📄  RUN METADATA (collapsed) ──────────────────────╮
     with st.expander(
-        f"📄 Run metadata — ID: {run_meta['Run ID']}",
+        f"📄 Мetadata — ID: {run_meta['Run ID']}",
         expanded=False,
     ):
         meta_cols = st.columns(3)
@@ -294,20 +275,26 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
 
     # ╭──────────────────── 💹 ACCOUNT & Performance ────────────────────────────╮
 
+    _fmt_pct = lambda v: "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{v:+.2%}"
+    _fmt_num = lambda v, p=2: "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{v:,.{p}f}"
+
+
     with st.container(border=True):
         st.subheader("💹 Account & Performance")
 
         # ------------------------------------------------------------------
-        # Date-range slider REMOVED at user request.
-        # We now analyse the entire back-test by default.
+        # We analyse the entire back-test by default.
+        # If strategy_returns is empty, returns_view will also be empty.
         # ------------------------------------------------------------------
-        # If strategy_returns is empty, returns_view will also be empty,
-        # otherwise it will reference the full DataFrame.
         returns_view = strategy_returns
 
         # ── Tabs -----------------------------------------------------------
         perf_tabs = st.tabs([
-            "Summary", "Balances & Fees", "PnL", "Return & Risk", "General",
+            "Summary",
+            "Balances & Fees",
+            "PnL",
+            "Return & Risk",
+            "General",
         ])
 
         # ── Tab 0: Summary -------------------------------------------------
@@ -319,100 +306,15 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
             hdr[2].metric("Elapsed", run_meta["Elapsed time"])
             hdr[3].metric("Orders", run_meta["Total orders"])
 
-            # KPI grid using native Streamlit colouring
+            # KPI grid
             kcols = st.columns(len(kpi))
             for (label, value), col in zip(kpi.items(), kcols):
                 is_pct = any(tok in label for tok in ("%", "PnL", "DD"))
-                if value is None or (isinstance(value, float) and np.isnan(value)):
-                    col.metric(label, "—", delta="")
-                    continue
-                text = f"{value:+.2%}" if is_pct else f"{value:+,.2f}"
-                dcol = "normal" if value > 0 else "inverse" if value < 0 else "off"
-                col.metric(label, text, delta=text, delta_color=dcol)
+                text = _fmt_pct(value) if is_pct else _fmt_num(value)
+                col.metric(label, text)
 
-        # === Tab 1: PnL Details ==============================================================
+        # === Tab 1: Balances & Fees ==============================================
         with perf_tabs[1]:
-            pnl_metrics = result.get("metrics", {})
-            btc, usd = pnl_metrics.get("btc", {}), pnl_metrics.get("usdt", {})
-
-            pnl_cols = st.columns(4)
-            pnl_cols[0].metric("BTC PnL", btc.get("total", "—"))
-            pnl_cols[1].metric("BTC PnL %", btc.get("pct", "—"))
-            pnl_cols[2].metric("USDT PnL", usd.get("total", kpi.get("PnL ($)", "—")))
-            pnl_cols[3].metric("USDT PnL %", usd.get("pct", kpi.get("PnL (%)", "—")))
-
-            # Raw PnL metrics under an expander ------------------------------------------------
-            with st.expander("Raw PnL metrics"):
-                pnl_df = pd.DataFrame(
-                    {
-                        "Metric": [
-                            "Max winner",
-                            "Avg winner",
-                            "Min winner",
-                            "Max loser",
-                            "Avg loser",
-                            "Min loser",
-                            "Expectancy",
-                            "Win rate",
-                        ],
-                        "BTC": [
-                            btc.get("max_win"),
-                            btc.get("avg_win"),
-                            btc.get("min_win"),
-                            btc.get("max_loss"),
-                            btc.get("avg_loss"),
-                            btc.get("min_loss"),
-                            btc.get("expectancy"),
-                            btc.get("win_rate"),
-                        ],
-                        "USDT": [
-                            usd.get("max_win"),
-                            usd.get("avg_win"),
-                            usd.get("min_win"),
-                            usd.get("max_loss"),
-                            usd.get("avg_loss"),
-                            usd.get("min_loss"),
-                            usd.get("expectancy"),
-                            usd.get("win_rate", kpi.get("Win Rate")),
-                        ],
-                    }
-                ).set_index("Metric")
-                st.dataframe(pnl_df, height=280)
-
-        # === Tab 2: Return & Risk =============================================================
-        with perf_tabs[2]:
-            if returns_view.empty:
-                st.info("Not enough data to compute return stats.")
-            else:
-                ret_stats = {
-                    "Volatility (252d)": kpi.get("Volatility (252d)"),
-                    "Avg daily return": returns_view.mean(),
-                    "Avg loss (daily)": returns_view[returns_view < 0].mean(),
-                    "Avg win (daily)": returns_view[returns_view > 0].mean(),
-                    "Sharpe (252d)": kpi.get("Sharpe"),
-                    "Sortino (252d)": kpi.get("Sortino"),
-                    "Profit factor": kpi.get("Profit Factor"),
-                    "Risk / Return": (
-                        abs(kpi.get("Max DD (%)", np.nan)) / 100 / kpi.get("PnL (%)")
-                        if kpi.get("PnL (%)") not in (None, 0, np.nan) else np.nan
-                    ),
-                }
-                cols = st.columns(4)
-                for (lbl, val), col in zip(ret_stats.items(), cols * 2):
-                    if val is None or (isinstance(val, float) and np.isnan(val)):
-                        col.metric(lbl, "—")
-                        continue
-
-                    is_pct = "%" in lbl or lbl.endswith("(%)")
-                    formatted = f"{val:+.2%}" if is_pct else f"{val:+,.2f}"
-                    col.metric(lbl, formatted)
-
-                # Distribution of daily returns -----------------------------------------------
-                st.markdown("##### Daily returns distribution")
-                st.bar_chart(returns_view, height=200)
-
-        # === Tab 3: Balances & Fees ===========================================================
-        with perf_tabs[3]:
             bal_cols = st.columns(4)
             initial_bal = result.get("initial_balances", {"USDT": 10_000, "BTC": 1})
             final_bal = result.get("final_balances", {"USDT": 9_872.06, "BTC": 1})
@@ -424,28 +326,81 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
             bal_cols[3].metric("Final BTC", _fmt_btc(final_bal.get("BTC")))
 
             fee_cols = st.columns(2)
-            fee_cols[0].metric("Total fees", _fmt_usd(-comm_total) if comm_total else "—")
-            fee_cols[1].metric(
-                "Unrealised PnL",
-                f"{unrealised:+,.2f}" if unrealised is not None else "—",
-            )
+            fee_cols[0].metric("Total fees",
+                               _fmt_usd(-comm_total) if comm_total else "—")
+            fee_cols[1].metric("Unrealised PnL",
+                               _fmt_num(unrealised) if unrealised is not None else "—")
 
-        # === Tab 4: General statistics =======================================================
+        # === Tab 2: PnL ==========================================================
+        with perf_tabs[2]:
+            pnl_metrics = result.get("metrics", {})
+            btc, usd = pnl_metrics.get("btc", {}), pnl_metrics.get("usdt", {})
+
+            mcols = st.columns(4)
+            mcols[0].metric("BTC PnL", btc.get("total", "—"))
+            mcols[1].metric("BTC PnL %", btc.get("pct", "—"))
+            mcols[2].metric("USDT PnL", usd.get("total", kpi.get("PnL ($)", "—")))
+            mcols[3].metric("USDT PnL %",
+                            usd.get("pct", kpi.get("PnL (%)", "—")))
+
+            st.markdown("#### Raw PnL metrics")
+            raw = [
+                ("Max win BTC", btc.get("max_win")),
+                ("Avg win BTC", btc.get("avg_win")),
+                ("Min win BTC", btc.get("min_win")),
+                ("Max loss BTC", btc.get("max_loss")),
+                ("Avg loss BTC", btc.get("avg_loss")),
+                ("Min loss BTC", btc.get("min_loss")),
+                ("Expectancy BTC", btc.get("expectancy")),
+                ("Win rate BTC", btc.get("win_rate")),
+                ("Max win USDT", usd.get("max_win")),
+                ("Avg win USDT", usd.get("avg_win")),
+                ("Min win USDT", usd.get("min_win")),
+                ("Max loss USDT", usd.get("max_loss")),
+                ("Avg loss USDT", usd.get("avg_loss")),
+                ("Min loss USDT", usd.get("min_loss")),
+                ("Expectancy USDT", usd.get("expectancy")),
+                ("Win rate USDT", usd.get("win_rate", kpi.get("Win Rate"))),
+            ]
+            grid = st.columns(4)
+            for (lbl, val), col in zip(raw, grid * ((len(raw) // 4) + 1)):
+                pct = "rate" in lbl.lower()
+                col.metric(lbl, _fmt_pct(val) if pct else _fmt_num(val))
+
+        # === Tab 3: Return & Risk ==============================================
+        with perf_tabs[3]:
+            if returns_view.empty:
+                st.info("Not enough data to compute return stats.")
+            else:
+                stats = {
+                    "Volatility (252d)": kpi.get("Volatility (252d)"),
+                    "Avg daily return": returns_view.mean(),
+                    "Avg loss (daily)": returns_view[returns_view < 0].mean(),
+                    "Avg win (daily)": returns_view[returns_view > 0].mean(),
+                    "Sharpe (252d)": kpi.get("Sharpe"),
+                    "Sortino (252d)": kpi.get("Sortino"),
+                    "Profit factor": kpi.get("Profit Factor"),
+                    "Risk / Return": (
+                        abs(kpi.get("Max DD (%)", np.nan)) / 100 /
+                        kpi.get("PnL (%)")
+                        if kpi.get("PnL (%)") not in (None, 0, np.nan) else np.nan
+                    ),
+                }
+                rcols = st.columns(4)
+                for (lbl, val), col in zip(stats.items(), rcols * 2):
+                    pct = "%" in lbl or lbl.endswith("(%)")
+                    col.metric(lbl, _fmt_pct(val) if pct else _fmt_num(val, 4))
+
+        # === Tab 4: General =====================================================
         with perf_tabs[4]:
             long_ratio = result.get("long_ratio")
             if long_ratio is None and not trades_df.empty and "side" in trades_df:
                 long_ratio = (trades_df["side"].str.upper() == "BUY").mean()
 
-            st.metric("Long ratio", f"{long_ratio:.0%}" if long_ratio is not None else "—")
+            st.metric("Long ratio",
+                      _fmt_pct(long_ratio) if long_ratio is not None else "—")
             st.metric("Positions", run_meta.get("Total positions", "—"))
             st.metric("Trades", len(trades_df) if not trades_df.empty else 0)
-
-            # Trades log ----------------------------------------------------------------------
-            if not trades_df.empty:
-                with st.expander("Trades log"):
-                    st.dataframe(trades_df)
-
-
 
 
 
@@ -550,30 +505,40 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
 
     # ③ Risk & Seasonality ----------------------------------------------------
     st.subheader("📊 Risk & Seasonality")
-    roll = st.slider("Rolling window (days)", 5, 60, 20, key="roll")
+
+    # окно скольжения берём на весь доступный период
+    roll = len(strategy_returns) if not strategy_returns.empty else 1
 
     if strategy_returns.empty:
         st.info("Not enough data for risk calculations.")
     else:
-        rvol   = strategy_returns.rolling(roll).std(ddof=0).mul(np.sqrt(252)).dropna()
-        cov    = strategy_returns.rolling(roll).cov(benchmark_returns)
-        rbeta  = (cov / benchmark_returns.rolling(roll).var(ddof=0)).dropna()
+        rvol = strategy_returns.rolling(roll).std(ddof=0).mul(np.sqrt(252)).dropna()
+        cov = strategy_returns.rolling(roll).cov(benchmark_returns)
+        rbeta = (cov / benchmark_returns.rolling(roll).var(ddof=0)).dropna()
         rsharp = strategy_returns.rolling(roll).apply(lambda s: sharpe(s)).dropna()
 
         risk_tabs = st.tabs(["Distribution & VaR", "Rolling metrics", "Seasonality"])
 
+        # ── Distribution & VaR ───────────────────────────────────────────────
         var5 = np.percentile(strategy_returns, 5)
-        hist = px.histogram(strategy_returns, nbins=60, template=TPL, title="Return distribution")
+        hist = px.histogram(
+            strategy_returns,
+            nbins=60,
+            template=TPL,
+            title="Return distribution"
+        )
         hist.add_vline(x=var5, line_color=NEG, annotation_text="VaR 5%")
         risk_tabs[0].plotly_chart(hist, use_container_width=True)
 
+        # ── Rolling metrics (по факту – одно значение на конец периода) ─────
         fig_roll = go.Figure()
-        fig_roll.add_trace(go.Scatter(x=rsharp.index, y=rsharp, name="Rolling Sharpe"))
-        fig_roll.add_trace(go.Scatter(x=rvol.index,   y=rvol,   name="Rolling Volatility"))
-        fig_roll.add_trace(go.Scatter(x=rbeta.index,  y=rbeta,  name="Rolling Beta"))
+        fig_roll.add_trace(go.Scatter(x=rsharp.index, y=rsharp, name="Sharpe (full window)"))
+        fig_roll.add_trace(go.Scatter(x=rvol.index, y=rvol, name="Volatility (full window)"))
+        fig_roll.add_trace(go.Scatter(x=rbeta.index, y=rbeta, name="Beta (full window)"))
         fig_roll.update_layout(template=TPL, height=350, legend_orientation="h")
         risk_tabs[1].plotly_chart(fig_roll, use_container_width=True)
 
+        # ── Seasonality ─────────────────────────────────────────────────────
         wd_ret = strategy_returns.groupby(strategy_returns.index.weekday).mean() * 100
         week_bar = px.bar(
             x=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
@@ -581,8 +546,12 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
             template=TPL,
             title="Average return by weekday",
         )
+
         monthly_heat = (
-            strategy_returns.resample("M").sum().to_frame("ret").assign(
+            strategy_returns
+            .resample("M").sum()
+            .to_frame("ret")
+            .assign(
                 Year=lambda d: d.index.year,
                 Month=lambda d: d.index.month_name().str[:3],
             )
@@ -594,8 +563,10 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
             template=TPL,
             title="Monthly return heatmap",
         )
+
         risk_tabs[2].plotly_chart(week_bar, use_container_width=True)
-        risk_tabs[2].plotly_chart(heatmap,   use_container_width=True)
+        risk_tabs[2].plotly_chart(heatmap, use_container_width=True)
+
     st.markdown("---")
 
     # ④ Trades stats & allocation --------------------------------------------
