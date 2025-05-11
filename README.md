@@ -1,4 +1,5 @@
 # NautilusTrader Streamlit
+![DEMO](https://github.com/Sergey-1221/nautilus_trader_streamlit/raw/main/image/demo.png)
 [DEMO](https://nautilustrader.streamlit.app/)
 
 ## 🎯 Project Goal
