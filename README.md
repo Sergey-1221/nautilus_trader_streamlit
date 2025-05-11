@@ -24,7 +24,7 @@ NautilusTrader is a rapidly evolving open-source platform for algorithmic tradin
 Run the app:
 
 ```bash
-streamlit run app.py
+streamlit run app/main.py
 ```
 
 ---
