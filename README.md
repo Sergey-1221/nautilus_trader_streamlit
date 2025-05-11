@@ -1,4 +1,5 @@
 # NautilusTrader Streamlit
+[DEMO](https://nautilustrader.streamlit.app/)
 
 ## 🎯 Project Goal
 
