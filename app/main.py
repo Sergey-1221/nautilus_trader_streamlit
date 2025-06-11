@@ -311,6 +311,10 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
                 text = _fmt_pct(value) if is_pct else _fmt_num(value)
                 col.metric(label, text)
 
+            win_rate = kpi.get("Win Rate")
+            if win_rate is not None and not np.isnan(win_rate):
+                st.progress(float(win_rate))
+
         # === Tab 1: Balances & Fees ==============================================
         with perf_tabs[1]:
             bal_cols = st.columns(4)
@@ -397,6 +401,8 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
 
             st.metric("Long ratio",
                       _fmt_pct(long_ratio) if long_ratio is not None else "—")
+            if long_ratio is not None:
+                st.progress(float(long_ratio))
             st.metric("Positions", run_meta.get("Total positions", "—"))
             st.metric("Trades", len(trades_df) if not trades_df.empty else 0)
 
@@ -571,7 +577,7 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
     left_bot, right_bot = st.columns(2)
 
     with left_bot:
-        st.subheader("Trades statistics")
+        st.subheader("📊 Trades statistics")
         if not trades_df.empty:
             if "duration_h" not in trades_df.columns:
                 trades_df["duration_h"] = (
@@ -598,7 +604,7 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
             st.info("No trades to display.")
 
     with right_bot:
-        st.subheader("Portfolio allocation")
+        st.subheader("🎯 Portfolio allocation")
         pos_df = result.get("positions_df", pd.DataFrame())
         if not pos_df.empty and {"symbol", "size"}.issubset(pos_df.columns):
             alloc = pos_df.groupby("symbol")["size"].sum().abs()
@@ -609,14 +615,15 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
             px.pie(values=alloc.values, names=alloc.index, template=TPL),
             use_container_width=True,
         )
-        st.table(alloc.rename("Weight"))
+        alloc_styler = alloc.rename("Weight").to_frame().style.bar(color=ACCENT)
+        st.table(alloc_styler)
     st.markdown("---")
 
     # ⑤ Metrics, raw log & engine stats --------------------------------------
-    tab_metrics, tab_log, tab_extra = st.tabs(["Key metrics", "Trades log", "Engine stats"])
-    tab_metrics.dataframe(
-        pd.DataFrame.from_dict({**kpi, **extra_stats}, orient="index", columns=["Value"])
-    )
+    tab_metrics, tab_log, tab_extra = st.tabs(["📊 Key metrics", "📝 Trades log", "⚙️ Engine stats"])
+    metrics_df = pd.DataFrame.from_dict({**kpi, **extra_stats}, orient="index", columns=["Value"])
+    metrics_styler = metrics_df.style.format("{:.4f}").background_gradient(cmap="Greens")
+    tab_metrics.dataframe(metrics_styler, use_container_width=True)
 
     if not trades_df.empty:
         cols_show = [
@@ -628,7 +635,11 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
             "commission" if "commission" in trades_df.columns else None,
         ]
         cols_show = [c for c in cols_show if c and c in trades_df.columns]
-        tab_log.dataframe(trades_df[cols_show], use_container_width=True, height=350)
+        styled_log = trades_df[cols_show].style.applymap(
+            lambda v: f"color:{ACCENT}" if isinstance(v, (int, float)) and v > 0 else (f"color:{NEG}" if isinstance(v, (int, float)) and v < 0 else "") ,
+            subset=["profit"]
+        )
+        tab_log.dataframe(styled_log, use_container_width=True, height=350)
     else:
         tab_log.info("No trades recorded.")
 
@@ -648,7 +659,7 @@ if not strategies:
     st.stop()
 
 with st.sidebar:
-    st.header("Configuration")
+    st.header("⚙️ Configuration")
     strat_name = st.selectbox("Strategy", list(strategies))
     info = strategies[strat_name]
     if info.doc:
@@ -658,7 +669,7 @@ with st.sidebar:
     data_file = "BINANCE_BTCUSD, 1.csv" if timeframe == "1min" else "BINANCE_BTCUSD, 15.csv"
     st.write(f"Data file: **{data_file}**")
 
-    st.subheader("Parameters")
+    st.subheader("🛠 Parameters")
     params: Dict[str, Any] = {}
     for field, ann in info.cfg_cls.__annotations__.items():
         if field in ("instrument_id", "bar_type"):
