@@ -304,11 +304,18 @@ def run_backtest(
     strat_cls: Type[Strategy],
     cfg_cls: Type[StrategyConfig],
     params: Dict[str, Any],
-    data_file: str,
-    actor_cls: Type, # <-- ИЗМЕНЕНИЕ: Добавлен параметр actor_cls
+    data: Any,
+    actor_cls: Type,  # <-- ИЗМЕНЕНИЕ: Добавлен параметр actor_cls
     reuse_engine: Optional[BacktestEngine] = None,
 ) -> Dict[str, Any]:
-    csv = load_ohlcv_csv(data_file)
+    """Run a back-test using either a CSV path or a ready DataFrame."""
+
+    if isinstance(data, str):
+        csv = load_ohlcv_csv(data)
+    elif isinstance(data, pd.DataFrame):
+        csv = data
+    else:
+        raise TypeError("data must be a path to CSV or pandas.DataFrame")
     instr, bar_type, bars, price_df = dataframe_to_bars(csv)
 
 
