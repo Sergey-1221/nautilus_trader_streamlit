@@ -8,3 +8,4 @@ pandas
 numpy
 plotly
 nautilus_trader
+clickhouse-driver

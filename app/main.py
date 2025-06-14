@@ -27,6 +27,8 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
 from modules.strategy_loader import discover_strategies
 from modules.backtest_runner import run_backtest
 from modules.dashboard_actor import DashboardPublisher  # optional, only if supported
+from modules.clickhouse import ClickHouseConnector
+from modules.csv_data import load_ohlcv_csv
 from datetime import timedelta
 
 # ───────────────────────────── Streamlit page ────────────────────────────────
@@ -684,8 +686,23 @@ with st.sidebar:
         st.caption(info.doc)
 
     timeframe = st.selectbox("Timeframe", ["1min", "15min"])
-    data_file = "BINANCE_BTCUSD, 1.csv" if timeframe == "1min" else "BINANCE_BTCUSD, 15.csv"
-    st.write(f"Data file: **{data_file}**")
+
+    # ── Data source tabs ────────────────────────────────────────────────
+    csv_path = None
+    symbol = None
+    exchange = None
+    run_bt_csv = False
+    run_bt_ch = False
+    tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"])
+    with tab_csv:
+        csv_path = "BINANCE_BTCUSD, 1.csv" if timeframe == "1min" else "BINANCE_BTCUSD, 15.csv"
+        st.write(f"Data file: **{csv_path}**")
+        run_bt_csv = st.button("Run back‑test", key="run_bt_csv")
+
+    with tab_ch:
+        symbol = st.text_input("Symbol", "BTCUSDT")
+        exchange = st.text_input("Exchange", "BINANCE")
+        run_bt_ch = st.button("Run back‑test", key="run_bt_ch")
 
     st.subheader("Parameters")
     params: Dict[str, Any] = {}
@@ -711,11 +728,28 @@ with st.sidebar:
     ACCENT, NEG = ("#10B981", "#EF4444") if theme == "Light" else ("#22D3EE", "#F43F5E")
 
     st.markdown("---")
-    run_bt = st.button("Run back‑test", type="primary")
 
 # ╭──────────────────────── run back‑test on click ────────────────────────────╮
+run_bt = run_bt_csv or run_bt_ch
+if run_bt_csv:
+    data_source = "CSV"
+    data_spec = csv_path
+elif run_bt_ch:
+    data_source = "ClickHouse"
+    data_spec = {
+        "exchange": exchange,
+        "symbol": symbol,
+        "timeframe": "1m" if timeframe == "1min" else "15m",
+    }
+
 if run_bt:
     with st.spinner("Running back‑test… please wait"):
+        if data_source == "ClickHouse":
+            ch = ClickHouseConnector()
+            data_df = ch.candles(**data_spec, auto_clip=True)
+        else:
+            data_df = load_ohlcv_csv(data_spec)
+
         log_stream = io.StringIO()
         with redirect_stdout(log_stream), redirect_stderr(log_stream):
             try:
@@ -723,7 +757,7 @@ if run_bt:
                     info.strategy_cls,
                     info.cfg_cls,
                     params,
-                    data_file,
+                    data_df,
                     actor_cls=DashboardPublisher,  # only if supported
                 )
             except TypeError:  # actor_cls not accepted
@@ -731,7 +765,7 @@ if run_bt:
                     info.strategy_cls,
                     info.cfg_cls,
                     params,
-                    data_file,
+                    data_df,
                 )
         log_text = log_stream.getvalue()
 
