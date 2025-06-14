@@ -44,6 +44,8 @@ st.markdown(
     }
     /* reduce padding on tab labels to save vertical space */
     .stTabs [data-baseweb="tab"] { padding-top:4px; padding-bottom:4px; }
+    /* compact dataframe cells */
+    .stDataFrame tbody tr td { padding-top:2px; padding-bottom:2px; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -161,6 +163,17 @@ def _fmt_btc(num: float | Decimal | None) -> str:
     return "—" if num is None else f"{num:,.8f} BTC"
 
 
+def style_trades(df: pd.DataFrame) -> pd.DataFrame | pd.Styler:
+    """Apply styling to the trades log table."""
+    if "profit" in df.columns:
+        styler = df.style.applymap(
+            lambda v: f"color: {'#10B981' if v > 0 else '#EF4444'}",
+            subset=["profit"],
+        )
+        return styler
+    return df
+
+
 # ╭──────────────────────── dashboard renderer ───────────────────────────────╮
 def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str) -> None:
     """
@@ -243,6 +256,16 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
         if not strategy_returns.empty
         else np.nan,
     }
+    KPI_ICONS = {
+        "PnL ($)": "💰",
+        "PnL (%)": "📈",
+        "Win Rate": "🏆",
+        "Sharpe": "⚖️",
+        "Sortino": "📐",
+        "Max DD (%)": "📉",
+        "Profit Factor": "🚀",
+        "Volatility (252d)": "📊",
+    }
 
     extra_stats = parse_extra_stats(log_text)
 
@@ -307,9 +330,10 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
             # KPI grid
             kcols = st.columns(len(kpi))
             for (label, value), col in zip(kpi.items(), kcols):
+                icon = KPI_ICONS.get(label, "")
                 is_pct = any(tok in label for tok in ("%", "PnL", "DD"))
                 text = _fmt_pct(value) if is_pct else _fmt_num(value)
-                col.metric(label, text)
+                col.metric(f"{icon} {label}", text)
 
         # === Tab 1: Balances & Fees ==============================================
         with perf_tabs[1]:
@@ -616,6 +640,7 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
     tab_metrics, tab_log, tab_extra = st.tabs(["Key metrics", "Trades log", "Engine stats"])
     tab_metrics.dataframe(
         pd.DataFrame.from_dict({**kpi, **extra_stats}, orient="index", columns=["Value"])
+        .style.format("{:.4f}")
     )
 
     if not trades_df.empty:
@@ -628,7 +653,11 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
             "commission" if "commission" in trades_df.columns else None,
         ]
         cols_show = [c for c in cols_show if c and c in trades_df.columns]
-        tab_log.dataframe(trades_df[cols_show], use_container_width=True, height=350)
+        tab_log.dataframe(
+            style_trades(trades_df[cols_show]),
+            use_container_width=True,
+            height=350,
+        )
     else:
         tab_log.info("No trades recorded.")
 
@@ -677,9 +706,9 @@ with st.sidebar:
         else:
             params[field] = st.text_input(label, value=str(default or ""))
 
-    theme = "Light"
+    theme = st.selectbox("Theme", ["Light", "Dark"], index=0)
     TPL = "plotly_dark" if theme == "Dark" else "plotly_white"
-    ACCENT, NEG = "#10B981", "#EF4444"
+    ACCENT, NEG = ("#10B981", "#EF4444") if theme == "Light" else ("#22D3EE", "#F43F5E")
 
     st.markdown("---")
     run_bt = st.button("Run back‑test", type="primary")

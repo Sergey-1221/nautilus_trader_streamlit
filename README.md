@@ -17,6 +17,7 @@ NautilusTrader is a rapidly evolving open-source platform for algorithmic tradin
 * ✅ **No frontend code**: work entirely in Python, no harder than Jupyter Notebook.
 * ✅ **Great for presentations**: beautiful and clear visualizations for investors and team members.
 * ✅ **Time-saving**: quickly identify bugs and strategy issues.
+* ✅ **Improved visuals**: themed widgets, icons and styled data tables.
 
 ---
 
