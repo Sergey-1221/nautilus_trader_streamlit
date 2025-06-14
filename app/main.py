@@ -27,6 +27,8 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
 from modules.strategy_loader import discover_strategies
 from modules.backtest_runner import run_backtest
 from modules.dashboard_actor import DashboardPublisher  # optional, only if supported
+from modules.clickhouse import ClickHouseConnector
+from modules.csv_data import load_ohlcv_csv
 from datetime import timedelta
 
 # ───────────────────────────── Streamlit page ────────────────────────────────
@@ -683,9 +685,21 @@ with st.sidebar:
     if info.doc:
         st.caption(info.doc)
 
+    data_source = st.selectbox("Data Source", ["CSV", "ClickHouse"], index=0)
     timeframe = st.selectbox("Timeframe", ["1min", "15min"])
-    data_file = "BINANCE_BTCUSD, 1.csv" if timeframe == "1min" else "BINANCE_BTCUSD, 15.csv"
-    st.write(f"Data file: **{data_file}**")
+
+    if data_source == "CSV":
+        csv_path = "BINANCE_BTCUSD, 1.csv" if timeframe == "1min" else "BINANCE_BTCUSD, 15.csv"
+        st.write(f"Data file: **{csv_path}**")
+        data_spec = csv_path
+    else:
+        symbol = st.text_input("Symbol", "BTCUSDT")
+        exchange = st.text_input("Exchange", "BINANCE")
+        data_spec = {
+            "exchange": exchange,
+            "symbol": symbol,
+            "timeframe": "1m" if timeframe == "1min" else "15m",
+        }
 
     st.subheader("Parameters")
     params: Dict[str, Any] = {}
@@ -716,6 +730,12 @@ with st.sidebar:
 # ╭──────────────────────── run back‑test on click ────────────────────────────╮
 if run_bt:
     with st.spinner("Running back‑test… please wait"):
+        if data_source == "ClickHouse":
+            ch = ClickHouseConnector()
+            data_df = ch.candles(**data_spec, auto_clip=True)
+        else:
+            data_df = load_ohlcv_csv(data_spec)
+
         log_stream = io.StringIO()
         with redirect_stdout(log_stream), redirect_stderr(log_stream):
             try:
@@ -723,7 +743,7 @@ if run_bt:
                     info.strategy_cls,
                     info.cfg_cls,
                     params,
-                    data_file,
+                    data_df,
                     actor_cls=DashboardPublisher,  # only if supported
                 )
             except TypeError:  # actor_cls not accepted
@@ -731,7 +751,7 @@ if run_bt:
                     info.strategy_cls,
                     info.cfg_cls,
                     params,
-                    data_file,
+                    data_df,
                 )
         log_text = log_stream.getvalue()
 
