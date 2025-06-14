@@ -685,21 +685,24 @@ with st.sidebar:
     if info.doc:
         st.caption(info.doc)
 
-    data_source = st.selectbox("Data Source", ["CSV", "ClickHouse"], index=0)
     timeframe = st.selectbox("Timeframe", ["1min", "15min"])
 
-    if data_source == "CSV":
+    # ── Data source tabs ────────────────────────────────────────────────
+    csv_path = None
+    symbol = None
+    exchange = None
+    run_bt_csv = False
+    run_bt_ch = False
+    tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"])
+    with tab_csv:
         csv_path = "BINANCE_BTCUSD, 1.csv" if timeframe == "1min" else "BINANCE_BTCUSD, 15.csv"
         st.write(f"Data file: **{csv_path}**")
-        data_spec = csv_path
-    else:
+        run_bt_csv = st.button("Run back‑test", key="run_bt_csv")
+
+    with tab_ch:
         symbol = st.text_input("Symbol", "BTCUSDT")
         exchange = st.text_input("Exchange", "BINANCE")
-        data_spec = {
-            "exchange": exchange,
-            "symbol": symbol,
-            "timeframe": "1m" if timeframe == "1min" else "15m",
-        }
+        run_bt_ch = st.button("Run back‑test", key="run_bt_ch")
 
     st.subheader("Parameters")
     params: Dict[str, Any] = {}
@@ -725,9 +728,20 @@ with st.sidebar:
     ACCENT, NEG = ("#10B981", "#EF4444") if theme == "Light" else ("#22D3EE", "#F43F5E")
 
     st.markdown("---")
-    run_bt = st.button("Run back‑test", type="primary")
 
 # ╭──────────────────────── run back‑test on click ────────────────────────────╮
+run_bt = run_bt_csv or run_bt_ch
+if run_bt_csv:
+    data_source = "CSV"
+    data_spec = csv_path
+elif run_bt_ch:
+    data_source = "ClickHouse"
+    data_spec = {
+        "exchange": exchange,
+        "symbol": symbol,
+        "timeframe": "1m" if timeframe == "1min" else "15m",
+    }
+
 if run_bt:
     with st.spinner("Running back‑test… please wait"):
         if data_source == "ClickHouse":
