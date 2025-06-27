@@ -48,6 +48,14 @@ st.markdown(
     .stTabs [data-baseweb="tab"] { padding-top:4px; padding-bottom:4px; }
     /* compact dataframe cells */
     .stDataFrame tbody tr td { padding-top:2px; padding-bottom:2px; }
+    /* tighter spacing for sidebar data source section */
+    [data-testid="stSidebar"] .data-source-header {
+        margin-top:-0.5rem;
+        margin-bottom:0;
+    }
+    [data-testid="stSidebar"] [data-testid="stTabs"] {
+        margin-top:0;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -689,7 +697,7 @@ with st.sidebar:
 
     # ── Data source tabs ────────────────────────────────────────────────
     st.markdown(
-        "<h5 style='margin-top:0;margin-bottom:-0.25rem'>Data source</h5>",
+        "<h5 class='data-source-header'>Data source</h5>",
         unsafe_allow_html=True,
     )
     csv_path = None
