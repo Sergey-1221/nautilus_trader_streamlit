@@ -688,6 +688,7 @@ with st.sidebar:
     timeframe = st.selectbox("Timeframe", ["1min", "15min"])
 
     # ── Data source tabs ────────────────────────────────────────────────
+    st.subheader("Data source")
     csv_path = None
     symbol = None
     exchange = None
