@@ -713,9 +713,7 @@ with st.sidebar:
     end_csv = datetime.utcnow().date()
     start_ch = start_csv
     end_ch = end_csv
-    run_bt_csv = False
-    run_bt_ch = False
-    tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"])
+    tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"], key="data_src_tab")
     with tab_csv:
         row1 = st.columns(3)
         row1[0].text_input(
@@ -739,7 +737,6 @@ with st.sidebar:
         else:
             csv_path = ""
         st.write(f"Data file: **{csv_path}**")
-        run_bt_csv = st.button("Run back‑test", key="run_bt_csv")
 
     with tab_ch:
         row1 = st.columns(3)
@@ -749,7 +746,6 @@ with st.sidebar:
         row2 = st.columns(2)
         start_ch = row2[0].date_input("Date from", start_ch, key="ch_start")
         end_ch = row2[1].date_input("Date to", end_ch, key="ch_end")
-        run_bt_ch = st.button("Run back‑test", key="run_bt_ch")
 
     st.subheader("Parameters")
     params: Dict[str, Any] = {}
@@ -775,27 +771,25 @@ with st.sidebar:
     ACCENT, NEG = ("#10B981", "#EF4444") if theme == "Light" else ("#22D3EE", "#F43F5E")
 
     st.markdown("---")
+    run_bt = st.button("Run back‑test", key="run_backtest")
 
 # ╭──────────────────────── run back‑test on click ────────────────────────────╮
-run_bt = run_bt_csv or run_bt_ch
-start_dt = None
-end_dt = None
-if run_bt_csv:
-    data_source = "CSV"
-    data_spec = csv_path
-    start_dt = pd.to_datetime(start_csv)
-    end_dt = pd.to_datetime(end_csv) + pd.Timedelta(days=1)
-elif run_bt_ch:
-    data_source = "ClickHouse"
-    data_spec = {
-        "exchange": exchange,
-        "symbol": symbol,
-        "timeframe": (tf_ch[:-3] + "m") if tf_ch.endswith("min") else tf_ch,
-        "start": datetime.combine(start_ch, datetime.min.time()),
-        "end": datetime.combine(end_ch, datetime.min.time()),
-    }
-
 if run_bt:
+    tab_idx = st.session_state.get("data_src_tab", 0)
+    if tab_idx == 0:
+        data_source = "CSV"
+        data_spec = csv_path
+        start_dt = pd.to_datetime(start_csv)
+        end_dt = pd.to_datetime(end_csv) + pd.Timedelta(days=1)
+    else:
+        data_source = "ClickHouse"
+        data_spec = {
+            "exchange": exchange,
+            "symbol": symbol,
+            "timeframe": (tf_ch[:-3] + "m") if tf_ch.endswith("min") else tf_ch,
+            "start": datetime.combine(start_ch, datetime.min.time()),
+            "end": datetime.combine(end_ch, datetime.min.time()),
+        }
     with st.spinner("Running back‑test… please wait"):
         connector = DataConnector()
         data_df = connector.load(data_source, data_spec, start=start_dt, end=end_dt)
