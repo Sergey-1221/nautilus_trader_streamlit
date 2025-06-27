@@ -692,7 +692,6 @@ with st.sidebar:
     if info.doc:
         st.caption(info.doc)
 
-    timeframe = st.selectbox("Timeframe", ["1min", "15min"])
 
     # ── Data source tabs ────────────────────────────────────────────────
     st.markdown(
@@ -702,17 +701,35 @@ with st.sidebar:
     csv_path = None
     symbol = None
     exchange = None
+    tf_csv = "1min"
+    tf_ch = "1min"
+    start_csv = datetime.utcnow().date() - timedelta(days=30)
+    end_csv = datetime.utcnow().date()
+    start_ch = start_csv
+    end_ch = end_csv
     run_bt_csv = False
     run_bt_ch = False
     tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"])
     with tab_csv:
-        csv_path = "BINANCE_BTCUSD, 1.csv" if timeframe == "1min" else "BINANCE_BTCUSD, 15.csv"
+        row1 = st.columns(3)
+        row1[0].text_input("Exchange", "BINANCE", disabled=True)
+        row1[1].text_input("Symbol", "BTCUSD", disabled=True)
+        tf_csv = row1[2].selectbox("TimeFrame", ["1min", "15min"], key="csv_tf")
+        row2 = st.columns(2)
+        start_csv = row2[0].date_input("Date from", start_csv, key="csv_start")
+        end_csv = row2[1].date_input("Date to", end_csv, key="csv_end")
+        csv_path = "BINANCE_BTCUSD, 1.csv" if tf_csv == "1min" else "BINANCE_BTCUSD, 15.csv"
         st.write(f"Data file: **{csv_path}**")
         run_bt_csv = st.button("Run back‑test", key="run_bt_csv")
 
     with tab_ch:
-        symbol = st.text_input("Symbol", "BTCUSDT")
-        exchange = st.text_input("Exchange", "BINANCE")
+        row1 = st.columns(3)
+        exchange = row1[0].text_input("Exchange", "BINANCE")
+        symbol = row1[1].text_input("Symbol", "BTCUSDT")
+        tf_ch = row1[2].selectbox("TimeFrame", ["1min", "15min"], key="ch_tf")
+        row2 = st.columns(2)
+        start_ch = row2[0].date_input("Date from", start_ch, key="ch_start")
+        end_ch = row2[1].date_input("Date to", end_ch, key="ch_end")
         run_bt_ch = st.button("Run back‑test", key="run_bt_ch")
 
     st.subheader("Parameters")
@@ -745,12 +762,16 @@ run_bt = run_bt_csv or run_bt_ch
 if run_bt_csv:
     data_source = "CSV"
     data_spec = csv_path
+    start_dt = pd.to_datetime(start_csv)
+    end_dt = pd.to_datetime(end_csv) + pd.Timedelta(days=1)
 elif run_bt_ch:
     data_source = "ClickHouse"
     data_spec = {
         "exchange": exchange,
         "symbol": symbol,
-        "timeframe": "1m" if timeframe == "1min" else "15m",
+        "timeframe": "1m" if tf_ch == "1min" else "15m",
+        "start": datetime.combine(start_ch, datetime.min.time()),
+        "end": datetime.combine(end_ch, datetime.min.time()),
     }
 
 if run_bt:
@@ -760,6 +781,7 @@ if run_bt:
             data_df = ch.candles(**data_spec, auto_clip=True)
         else:
             data_df = load_ohlcv_csv(data_spec)
+            data_df = data_df.loc[start_dt:end_dt]
 
         log_stream = io.StringIO()
         with redirect_stdout(log_stream), redirect_stderr(log_stream):
