@@ -27,8 +27,7 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
 from modules.strategy_loader import discover_strategies
 from modules.backtest_runner import run_backtest
 from modules.dashboard_actor import DashboardPublisher  # optional, only if supported
-from modules.clickhouse import ClickHouseConnector
-from modules.csv_data import load_ohlcv_csv
+from modules.data_connector import DataConnector
 from datetime import timedelta
 
 # ───────────────────────────── Streamlit page ────────────────────────────────
@@ -759,6 +758,8 @@ with st.sidebar:
 
 # ╭──────────────────────── run back‑test on click ────────────────────────────╮
 run_bt = run_bt_csv or run_bt_ch
+start_dt = None
+end_dt = None
 if run_bt_csv:
     data_source = "CSV"
     data_spec = csv_path
@@ -776,12 +777,8 @@ elif run_bt_ch:
 
 if run_bt:
     with st.spinner("Running back‑test… please wait"):
-        if data_source == "ClickHouse":
-            ch = ClickHouseConnector()
-            data_df = ch.candles(**data_spec, auto_clip=True)
-        else:
-            data_df = load_ohlcv_csv(data_spec)
-            data_df = data_df.loc[start_dt:end_dt]
+        connector = DataConnector()
+        data_df = connector.load(data_source, data_spec, start=start_dt, end=end_dt)
 
         log_stream = io.StringIO()
         with redirect_stdout(log_stream), redirect_stderr(log_stream):
