@@ -714,8 +714,6 @@ with st.sidebar:
     start_ch = start_csv
     end_ch = end_csv
     tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"], key="data_src_tab")
-    with tab_csv:
-        row1 = st.columns(3)
         row1[0].text_input(
             "Exchange",
             csv_exchs[0] if csv_exchs else "",
@@ -737,7 +735,6 @@ with st.sidebar:
         else:
             csv_path = ""
         st.write(f"Data file: **{csv_path}**")
-
     with tab_ch:
         row1 = st.columns(3)
         exchange = row1[0].selectbox("Exchange", ch_exchs, key="ch_exch")
@@ -746,7 +743,6 @@ with st.sidebar:
         row2 = st.columns(2)
         start_ch = row2[0].date_input("Date from", start_ch, key="ch_start")
         end_ch = row2[1].date_input("Date to", end_ch, key="ch_end")
-
     st.subheader("Parameters")
     params: Dict[str, Any] = {}
     for field, ann in info.cfg_cls.__annotations__.items():
@@ -772,9 +768,6 @@ with st.sidebar:
 
     st.markdown("---")
     run_bt = st.button("Run back‑test", key="run_backtest")
-
-# ╭──────────────────────── run back‑test on click ────────────────────────────╮
-if run_bt:
     tab_idx = st.session_state.get("data_src_tab", 0)
     if tab_idx == 0:
         data_source = "CSV"
@@ -789,6 +782,7 @@ if run_bt:
             "timeframe": (tf_ch[:-3] + "m") if tf_ch.endswith("min") else tf_ch,
             "start": datetime.combine(start_ch, datetime.min.time()),
             "end": datetime.combine(end_ch, datetime.min.time()),
+        }
         }
     with st.spinner("Running back‑test… please wait"):
         connector = DataConnector()
