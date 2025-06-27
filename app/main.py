@@ -712,8 +712,8 @@ with st.sidebar:
     tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"])
     with tab_csv:
         row1 = st.columns(3)
-        row1[0].text_input("Exchange", "BINANCE", disabled=True)
-        row1[1].text_input("Symbol", "BTCUSD", disabled=True)
+        row1[0].text_input("Exchange", "BINANCE", disabled=True, key="csv_exch")
+        row1[1].text_input("Symbol", "BTCUSD", disabled=True, key="csv_sym")
         tf_csv = row1[2].selectbox("TimeFrame", ["1min", "15min"], key="csv_tf")
         row2 = st.columns(2)
         start_csv = row2[0].date_input("Date from", start_csv, key="csv_start")
@@ -724,8 +724,8 @@ with st.sidebar:
 
     with tab_ch:
         row1 = st.columns(3)
-        exchange = row1[0].text_input("Exchange", "BINANCE")
-        symbol = row1[1].text_input("Symbol", "BTCUSDT")
+        exchange = row1[0].text_input("Exchange", "BINANCE", key="ch_exch")
+        symbol = row1[1].text_input("Symbol", "BTCUSDT", key="ch_sym")
         tf_ch = row1[2].selectbox("TimeFrame", ["1min", "15min"], key="ch_tf")
         row2 = st.columns(2)
         start_ch = row2[0].date_input("Date from", start_ch, key="ch_start")
