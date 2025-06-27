@@ -80,7 +80,7 @@ def dataframe_to_bars(
 # ────────────────────────────────────────────────────────────────
 # 1. Load CSV and convert to bars
 # ────────────────────────────────────────────────────────────────
-'''
+
 def load_bars(csv_path: str):
     """Load OHLC(V) data from CSV and convert to `Bar` objects."""
     csv_file = Path(csv_path)
@@ -208,7 +208,6 @@ def load_bars(csv_path: str):
 
     return instr, bar_type, bars, df
 
-'''
 
 # ────────────────────────────────────────────────────────────────
 # 2. Initialise Backtest Engine

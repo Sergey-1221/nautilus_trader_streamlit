@@ -27,8 +27,7 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
 from modules.strategy_loader import discover_strategies
 from modules.backtest_runner import run_backtest
 from modules.dashboard_actor import DashboardPublisher  # optional, only if supported
-from modules.clickhouse import ClickHouseConnector
-from modules.csv_data import load_ohlcv_csv
+from modules.data_connector import DataConnector
 from datetime import timedelta
 
 # ───────────────────────────── Streamlit page ────────────────────────────────
@@ -692,7 +691,8 @@ with st.sidebar:
     if info.doc:
         st.caption(info.doc)
 
-    timeframe = st.selectbox("Timeframe", ["1min", "15min"])
+    connector = DataConnector()
+
 
     # ── Data source tabs ────────────────────────────────────────────────
     st.markdown(
@@ -702,19 +702,47 @@ with st.sidebar:
     csv_path = None
     symbol = None
     exchange = None
-    run_bt_csv = False
-    run_bt_ch = False
-    tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"])
-    with tab_csv:
-        csv_path = "BINANCE_BTCUSD, 1.csv" if timeframe == "1min" else "BINANCE_BTCUSD, 15.csv"
+    csv_exchs = connector.get_exchanges("CSV")
+    csv_syms = connector.get_symbols("CSV", csv_exchs[0] if csv_exchs else None)
+    csv_tfs = connector.get_timeframes("CSV")
+    ch_exchs = connector.get_exchanges("ClickHouse")
+    ch_tfs = connector.get_timeframes("ClickHouse")
+    tf_csv = csv_tfs[0] if csv_tfs else ""
+    tf_ch = ch_tfs[0] if ch_tfs else ""
+    start_csv = datetime.utcnow().date() - timedelta(days=30)
+    end_csv = datetime.utcnow().date()
+    start_ch = start_csv
+    end_ch = end_csv
+    tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"], key="data_src_tab")
+        row1[0].text_input(
+            "Exchange",
+            csv_exchs[0] if csv_exchs else "",
+            disabled=True,
+            key="csv_exch",
+        )
+        row1[1].text_input(
+            "Symbol",
+            csv_syms[0] if csv_syms else "",
+            disabled=True,
+            key="csv_sym",
+        )
+        tf_csv = row1[2].selectbox("TimeFrame", csv_tfs, index=0, key="csv_tf")
+        row2 = st.columns(2)
+        start_csv = row2[0].date_input("Date from", start_csv, key="csv_start")
+        end_csv = row2[1].date_input("Date to", end_csv, key="csv_end")
+        if csv_exchs and csv_syms:
+            csv_path = connector.get_csv_path(csv_exchs[0], csv_syms[0], tf_csv)
+        else:
+            csv_path = ""
         st.write(f"Data file: **{csv_path}**")
-        run_bt_csv = st.button("Run back‑test", key="run_bt_csv")
-
     with tab_ch:
-        symbol = st.text_input("Symbol", "BTCUSDT")
-        exchange = st.text_input("Exchange", "BINANCE")
-        run_bt_ch = st.button("Run back‑test", key="run_bt_ch")
-
+        row1 = st.columns(3)
+        exchange = row1[0].selectbox("Exchange", ch_exchs, key="ch_exch")
+        symbol = row1[1].text_input("Symbol", "BTCUSDT", key="ch_sym")
+        tf_ch = row1[2].selectbox("TimeFrame", ch_tfs, key="ch_tf")
+        row2 = st.columns(2)
+        start_ch = row2[0].date_input("Date from", start_ch, key="ch_start")
+        end_ch = row2[1].date_input("Date to", end_ch, key="ch_end")
     st.subheader("Parameters")
     params: Dict[str, Any] = {}
     for field, ann in info.cfg_cls.__annotations__.items():
@@ -739,27 +767,28 @@ with st.sidebar:
     ACCENT, NEG = ("#10B981", "#EF4444") if theme == "Light" else ("#22D3EE", "#F43F5E")
 
     st.markdown("---")
-
-# ╭──────────────────────── run back‑test on click ────────────────────────────╮
-run_bt = run_bt_csv or run_bt_ch
-if run_bt_csv:
-    data_source = "CSV"
-    data_spec = csv_path
-elif run_bt_ch:
-    data_source = "ClickHouse"
-    data_spec = {
-        "exchange": exchange,
-        "symbol": symbol,
-        "timeframe": "1m" if timeframe == "1min" else "15m",
-    }
-
-if run_bt:
+    run_bt = st.button("Run back‑test", key="run_backtest")
+    tab_idx = st.session_state.get("data_src_tab", 0)
+    if tab_idx == 0:
+        data_source = "CSV"
+        data_spec = csv_path
+        start_dt = pd.to_datetime(start_csv)
+        end_dt = pd.to_datetime(end_csv) + pd.Timedelta(days=1)
+    else:
+        data_source = "ClickHouse"
+        data_spec = {
+            "exchange": exchange,
+            "symbol": symbol,
+            "timeframe": (tf_ch[:-3] + "m") if tf_ch.endswith("min") else tf_ch,
+            "start": datetime.combine(start_ch, datetime.min.time()),
+            "end": datetime.combine(end_ch, datetime.min.time()),
+        }
+        start_dt = datetime.combine(start_ch, datetime.min.time())
+        end_dt = datetime.combine(end_ch, datetime.min.time())
+        }
     with st.spinner("Running back‑test… please wait"):
-        if data_source == "ClickHouse":
-            ch = ClickHouseConnector()
-            data_df = ch.candles(**data_spec, auto_clip=True)
-        else:
-            data_df = load_ohlcv_csv(data_spec)
+        connector = DataConnector()
+        data_df = connector.load(data_source, data_spec, start=start_dt, end=end_dt)
 
         log_stream = io.StringIO()
         with redirect_stdout(log_stream), redirect_stderr(log_stream):
