@@ -5,7 +5,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import re
 
 import pandas as pd
 
@@ -15,17 +18,96 @@ from .clickhouse import ClickHouseConnector
 __all__ = ["DataConnector"]
 
 
-class DataConnector:
-    """Load OHLCV data from CSV or ClickHouse using a single API."""
+CSV_NAME_RE = re.compile(r"(?P<ex>[A-Z]+)_(?P<sym>[A-Z]+),\s*(?P<tf>\d+)\.csv")
 
-    def __init__(self, clickhouse_params: Optional[Dict[str, Any]] = None) -> None:
+
+class DataConnector:
+    """Load OHLCV data and expose available sources."""
+
+    def __init__(
+        self,
+        csv_dir: str | Path = ".",
+        clickhouse_params: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        self._csv_dir = Path(csv_dir)
+        self._csv_info: Optional[List[Dict[str, str]]] = None
         self._ch_params = clickhouse_params or {}
         self._ch: Optional[ClickHouseConnector] = None
+
+    # ------------------------------------------------------------------
+    def _scan_csv(self) -> List[Dict[str, str]]:
+        """Return cached info about CSV files."""
+        if self._csv_info is None:
+            info: List[Dict[str, str]] = []
+            for p in self._csv_dir.glob("*.csv"):
+                m = CSV_NAME_RE.match(p.name)
+                if m:
+                    tf = f"{m.group('tf')}min"
+                    info.append(
+                        {
+                            "path": str(p),
+                            "exchange": m.group("ex"),
+                            "symbol": m.group("sym"),
+                            "timeframe": tf,
+                        }
+                    )
+            self._csv_info = info
+        return self._csv_info
 
     def _get_ch(self) -> ClickHouseConnector:
         if self._ch is None:
             self._ch = ClickHouseConnector(**self._ch_params)
         return self._ch
+
+    # ------------------------------------------------------------------
+    def get_exchanges(self, source: str) -> List[str]:
+        source_u = source.upper()
+        if source_u == "CSV":
+            return sorted({i["exchange"] for i in self._scan_csv()})
+        if source_u == "CLICKHOUSE":
+            from .clickhouse import EXCHANGE_NAME_TO_ID
+            return sorted(EXCHANGE_NAME_TO_ID.keys())
+        raise ValueError(f"Unknown source: {source}")
+
+    def get_symbols(self, source: str, exchange: str | None = None) -> List[str]:
+        source_u = source.upper()
+        if source_u == "CSV":
+            return sorted({
+                i["symbol"]
+                for i in self._scan_csv()
+                if exchange is None or i["exchange"] == exchange
+            })
+        if source_u == "CLICKHOUSE":
+            return []  # symbol list not implemented
+        raise ValueError(f"Unknown source: {source}")
+
+    def get_timeframes(self, source: str) -> List[str]:
+        source_u = source.upper()
+        if source_u == "CSV":
+            return sorted({i["timeframe"] for i in self._scan_csv()})
+        if source_u == "CLICKHOUSE":
+            from .clickhouse import INTERVAL_STR_TO_CODE
+
+            def _conv(tf: str) -> str:
+                if tf.endswith("m"):
+                    return tf[:-1] + "min"
+                return tf
+
+            return sorted(_conv(tf) for tf in INTERVAL_STR_TO_CODE)
+        raise ValueError(f"Unknown source: {source}")
+
+    def get_csv_path(self, exchange: str, symbol: str, timeframe: str) -> str:
+        tf_norm = timeframe.lower().replace("min", "")
+        for i in self._scan_csv():
+            if (
+                i["exchange"].upper() == exchange.upper()
+                and i["symbol"].upper() == symbol.upper()
+                and i["timeframe"].lower().replace("min", "") == tf_norm
+            ):
+                return i["path"]
+        raise FileNotFoundError(
+            f"CSV not found for {exchange} {symbol} {timeframe}"
+        )
 
     def load(
         self,

@@ -691,6 +691,8 @@ with st.sidebar:
     if info.doc:
         st.caption(info.doc)
 
+    connector = DataConnector()
+
 
     # ── Data source tabs ────────────────────────────────────────────────
     st.markdown(
@@ -700,8 +702,13 @@ with st.sidebar:
     csv_path = None
     symbol = None
     exchange = None
-    tf_csv = "1min"
-    tf_ch = "1min"
+    csv_exchs = connector.get_exchanges("CSV")
+    csv_syms = connector.get_symbols("CSV", csv_exchs[0] if csv_exchs else None)
+    csv_tfs = connector.get_timeframes("CSV")
+    ch_exchs = connector.get_exchanges("ClickHouse")
+    ch_tfs = connector.get_timeframes("ClickHouse")
+    tf_csv = csv_tfs[0] if csv_tfs else ""
+    tf_ch = ch_tfs[0] if ch_tfs else ""
     start_csv = datetime.utcnow().date() - timedelta(days=30)
     end_csv = datetime.utcnow().date()
     start_ch = start_csv
@@ -711,21 +718,34 @@ with st.sidebar:
     tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"])
     with tab_csv:
         row1 = st.columns(3)
-        row1[0].text_input("Exchange", "BINANCE", disabled=True, key="csv_exch")
-        row1[1].text_input("Symbol", "BTCUSD", disabled=True, key="csv_sym")
-        tf_csv = row1[2].selectbox("TimeFrame", ["1min", "15min"], key="csv_tf")
+        row1[0].text_input(
+            "Exchange",
+            csv_exchs[0] if csv_exchs else "",
+            disabled=True,
+            key="csv_exch",
+        )
+        row1[1].text_input(
+            "Symbol",
+            csv_syms[0] if csv_syms else "",
+            disabled=True,
+            key="csv_sym",
+        )
+        tf_csv = row1[2].selectbox("TimeFrame", csv_tfs, index=0, key="csv_tf")
         row2 = st.columns(2)
         start_csv = row2[0].date_input("Date from", start_csv, key="csv_start")
         end_csv = row2[1].date_input("Date to", end_csv, key="csv_end")
-        csv_path = "BINANCE_BTCUSD, 1.csv" if tf_csv == "1min" else "BINANCE_BTCUSD, 15.csv"
+        if csv_exchs and csv_syms:
+            csv_path = connector.get_csv_path(csv_exchs[0], csv_syms[0], tf_csv)
+        else:
+            csv_path = ""
         st.write(f"Data file: **{csv_path}**")
         run_bt_csv = st.button("Run back‑test", key="run_bt_csv")
 
     with tab_ch:
         row1 = st.columns(3)
-        exchange = row1[0].text_input("Exchange", "BINANCE", key="ch_exch")
+        exchange = row1[0].selectbox("Exchange", ch_exchs, key="ch_exch")
         symbol = row1[1].text_input("Symbol", "BTCUSDT", key="ch_sym")
-        tf_ch = row1[2].selectbox("TimeFrame", ["1min", "15min"], key="ch_tf")
+        tf_ch = row1[2].selectbox("TimeFrame", ch_tfs, key="ch_tf")
         row2 = st.columns(2)
         start_ch = row2[0].date_input("Date from", start_ch, key="ch_start")
         end_ch = row2[1].date_input("Date to", end_ch, key="ch_end")
@@ -770,7 +790,7 @@ elif run_bt_ch:
     data_spec = {
         "exchange": exchange,
         "symbol": symbol,
-        "timeframe": "1m" if tf_ch == "1min" else "15m",
+        "timeframe": (tf_ch[:-3] + "m") if tf_ch.endswith("min") else tf_ch,
         "start": datetime.combine(start_ch, datetime.min.time()),
         "end": datetime.combine(end_ch, datetime.min.time()),
     }
