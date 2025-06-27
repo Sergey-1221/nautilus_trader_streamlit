@@ -688,7 +688,7 @@ with st.sidebar:
     timeframe = st.selectbox("Timeframe", ["1min", "15min"])
 
     # ── Data source tabs ────────────────────────────────────────────────
-    st.subheader("Data source")
+    st.markdown("<h5 style='margin-top:0.2rem;margin-bottom:0'>Data source</h5>", unsafe_allow_html=True)
     csv_path = None
     symbol = None
     exchange = None
