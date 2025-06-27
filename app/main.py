@@ -783,6 +783,8 @@ with st.sidebar:
             "start": datetime.combine(start_ch, datetime.min.time()),
             "end": datetime.combine(end_ch, datetime.min.time()),
         }
+        start_dt = datetime.combine(start_ch, datetime.min.time())
+        end_dt = datetime.combine(end_ch, datetime.min.time())
         }
     with st.spinner("Running back‑test… please wait"):
         connector = DataConnector()
