@@ -66,17 +66,20 @@ class DataConnector:
             return sorted({i["exchange"] for i in self._scan_csv()})
         if source_u == "CLICKHOUSE":
             from .clickhouse import EXCHANGE_NAME_TO_ID
+
             return sorted(EXCHANGE_NAME_TO_ID.keys())
         raise ValueError(f"Unknown source: {source}")
 
     def get_symbols(self, source: str, exchange: str | None = None) -> List[str]:
         source_u = source.upper()
         if source_u == "CSV":
-            return sorted({
-                i["symbol"]
-                for i in self._scan_csv()
-                if exchange is None or i["exchange"] == exchange
-            })
+            return sorted(
+                {
+                    i["symbol"]
+                    for i in self._scan_csv()
+                    if exchange is None or i["exchange"] == exchange
+                }
+            )
         if source_u == "CLICKHOUSE":
             return []  # symbol list not implemented
         raise ValueError(f"Unknown source: {source}")
@@ -105,9 +108,7 @@ class DataConnector:
                 and i["timeframe"].lower().replace("min", "") == tf_norm
             ):
                 return i["path"]
-        raise FileNotFoundError(
-            f"CSV not found for {exchange} {symbol} {timeframe}"
-        )
+        raise FileNotFoundError(f"CSV not found for {exchange} {symbol} {timeframe}")
 
     def load(
         self,
@@ -134,4 +135,3 @@ class DataConnector:
             return ch.candles(**spec, auto_clip=True)
 
         raise ValueError(f"Unknown data source: {source}")
-
