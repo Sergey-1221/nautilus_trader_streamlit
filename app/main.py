@@ -716,6 +716,7 @@ with st.sidebar:
     start_ch = start_csv
     end_ch = end_csv
     tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"], key="data_src_tab")
+
         exchange_csv = csv_exchs[0] if csv_exchs else ""
         symbol_csv = csv_syms[0] if csv_syms else ""
 
@@ -737,6 +738,7 @@ with st.sidebar:
             index=0,
             key="csv_tf",
         )
+
         row2 = st.columns(2)
         start_csv = row2[0].date_input(
             "Date from",
@@ -748,6 +750,7 @@ with st.sidebar:
             end_csv,
             key="csv_end",
         )
+
         if csv_exchs and csv_syms:
             csv_path = connector.get_csv_path(csv_exchs[0], csv_syms[0], tf_csv)
         else:
