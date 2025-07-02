@@ -726,10 +726,23 @@ with st.sidebar:
             disabled=True,
             key="csv_sym",
         )
-        tf_csv = row1[2].selectbox("TimeFrame", csv_tfs, index=0, key="csv_tf")
+        tf_csv = row1[2].selectbox(
+            "TimeFrame",
+            csv_tfs,
+            index=0,
+            key="csv_tf",
+        )
         row2 = st.columns(2)
-        start_csv = row2[0].date_input("Date from", start_csv, key="csv_start")
-        end_csv = row2[1].date_input("Date to", end_csv, key="csv_end")
+        start_csv = row2[0].date_input(
+            "Date from",
+            start_csv,
+            key="csv_start",
+        )
+        end_csv = row2[1].date_input(
+            "Date to",
+            end_csv,
+            key="csv_end",
+        )
         if csv_exchs and csv_syms:
             csv_path = connector.get_csv_path(csv_exchs[0], csv_syms[0], tf_csv)
         else:
