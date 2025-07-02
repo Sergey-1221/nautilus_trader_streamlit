@@ -27,8 +27,7 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
 from modules.strategy_loader import discover_strategies
 from modules.backtest_runner import run_backtest
 from modules.dashboard_actor import DashboardPublisher  # optional, only if supported
-from modules.clickhouse import ClickHouseConnector
-from modules.csv_data import load_ohlcv_csv
+from modules.data_connector import DataConnector
 from datetime import timedelta
 
 # ───────────────────────────── Streamlit page ────────────────────────────────
@@ -61,6 +60,7 @@ st.markdown(
 )
 
 st.title("NautilusTrader — dashboard")
+
 
 # ╭──────────────────────── helper utilities ─────────────────────────────────╮
 def is_simple(v: Any) -> bool:
@@ -184,7 +184,9 @@ def style_trades(df: pd.DataFrame) -> pd.DataFrame | pd.Styler:
 
 
 # ╭──────────────────────── dashboard renderer ───────────────────────────────╮
-def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str) -> None:
+def draw_dashboard(
+    result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str
+) -> None:
     """
     Build the entire Streamlit dashboard.
     Five high‑level blocks are always present (with fallbacks if data missing).
@@ -192,23 +194,25 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
 
     # ── 0. basic run metadata (needed multiple times) ------------------------
     run_meta = {
-        "Run ID":        getattr(result, "run_id", uuid.uuid4()),
-        "Run started":   result.get("run_started", datetime.utcnow()),
-        "Run finished":  result.get("run_finished", datetime.utcnow()),
-        "Elapsed time":  result.get("elapsed", "—"),
+        "Run ID": getattr(result, "run_id", uuid.uuid4()),
+        "Run started": result.get("run_started", datetime.utcnow()),
+        "Run finished": result.get("run_finished", datetime.utcnow()),
+        "Elapsed time": result.get("elapsed", "—"),
         "Backtest start": result["price_df"].index[0],
-        "Backtest end":   result["price_df"].index[-1],
-        "Backtest range": str(result["price_df"].index[-1] - result["price_df"].index[0]),
-        "Iterations":     result.get("iterations", "—"),
-        "Total events":   result.get("total_events", "—"),
-        "Total orders":   result.get("orders_count", "—"),
+        "Backtest end": result["price_df"].index[-1],
+        "Backtest range": str(
+            result["price_df"].index[-1] - result["price_df"].index[0]
+        ),
+        "Iterations": result.get("iterations", "—"),
+        "Total events": result.get("total_events", "—"),
+        "Total orders": result.get("orders_count", "—"),
         "Total positions": result.get("positions_count", "—"),
     }
 
     # ── 1. extract core DataFrames ------------------------------------------
-    price_df   = result["price_df"].copy()
-    equity_df  = result["equity_df"].copy()
-    trades_df  = result["trades_df"].copy()
+    price_df = result["price_df"].copy()
+    equity_df = result["equity_df"].copy()
+    trades_df = result["trades_df"].copy()
 
     for df in (price_df, equity_df, trades_df):
         if not df.empty and not isinstance(df.index, pd.DatetimeIndex):
@@ -249,21 +253,25 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
     comm_total = sum(result.get("commissions", {}).values())
 
     kpi = {
-        "PnL ($)":       result.get("metrics", {}).get("total_profit", np.nan),
-        "PnL (%)":       (
+        "PnL ($)": result.get("metrics", {}).get("total_profit", np.nan),
+        "PnL (%)": (
             (equity_df["equity"].iloc[-1] - equity_df["equity"].iloc[0])
             / equity_df["equity"].iloc[0]
             if not equity_df.empty
             else np.nan
         ),
-        "Win Rate":      result.get("metrics", {}).get("win_rate", np.nan),
-        "Sharpe":        sharpe(strategy_returns),
-        "Sortino":       sortino(strategy_returns),
-        "Max DD (%)":    max_dd(equity_df["equity"]) * 100 if not equity_df.empty else np.nan,
+        "Win Rate": result.get("metrics", {}).get("win_rate", np.nan),
+        "Sharpe": sharpe(strategy_returns),
+        "Sortino": sortino(strategy_returns),
+        "Max DD (%)": (
+            max_dd(equity_df["equity"]) * 100 if not equity_df.empty else np.nan
+        ),
         "Profit Factor": result.get("metrics", {}).get("profit_factor", np.nan),
-        "Volatility (252d)": strategy_returns.std(ddof=0) * np.sqrt(252)
-        if not strategy_returns.empty
-        else np.nan,
+        "Volatility (252d)": (
+            strategy_returns.std(ddof=0) * np.sqrt(252)
+            if not strategy_returns.empty
+            else np.nan
+        ),
     }
     KPI_ICONS = {
         "PnL ($)": "💰",
@@ -305,9 +313,12 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
 
     # ╭──────────────────── 💹 ACCOUNT & Performance ────────────────────────────╮
 
-    _fmt_pct = lambda v: "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{v:+.2%}"
-    _fmt_num = lambda v, p=2: "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{v:,.{p}f}"
-
+    _fmt_pct = lambda v: (
+        "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{v:+.2%}"
+    )
+    _fmt_num = lambda v, p=2: (
+        "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{v:,.{p}f}"
+    )
 
     with st.container(border=True):
         st.subheader("💹 Account & Performance")
@@ -319,13 +330,15 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
         returns_view = strategy_returns
 
         # ── Tabs -----------------------------------------------------------
-        perf_tabs = st.tabs([
-            "Summary",
-            "Balances & Fees",
-            "PnL",
-            "Return & Risk",
-            "General",
-        ])
+        perf_tabs = st.tabs(
+            [
+                "Summary",
+                "Balances & Fees",
+                "PnL",
+                "Return & Risk",
+                "General",
+            ]
+        )
 
         # ── Tab 0: Summary -------------------------------------------------
         with perf_tabs[0]:
@@ -357,10 +370,13 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
             bal_cols[3].metric("Final BTC", _fmt_btc(final_bal.get("BTC")))
 
             fee_cols = st.columns(2)
-            fee_cols[0].metric("Total fees",
-                               _fmt_usd(-comm_total) if comm_total else "—")
-            fee_cols[1].metric("Unrealised PnL",
-                               _fmt_num(unrealised) if unrealised is not None else "—")
+            fee_cols[0].metric(
+                "Total fees", _fmt_usd(-comm_total) if comm_total else "—"
+            )
+            fee_cols[1].metric(
+                "Unrealised PnL",
+                _fmt_num(unrealised) if unrealised is not None else "—",
+            )
 
         # === Tab 2: PnL ==========================================================
         with perf_tabs[2]:
@@ -371,8 +387,7 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
             mcols[0].metric("BTC PnL", btc.get("total", "—"))
             mcols[1].metric("BTC PnL %", btc.get("pct", "—"))
             mcols[2].metric("USDT PnL", usd.get("total", kpi.get("PnL ($)", "—")))
-            mcols[3].metric("USDT PnL %",
-                            usd.get("pct", kpi.get("PnL (%)", "—")))
+            mcols[3].metric("USDT PnL %", usd.get("pct", kpi.get("PnL (%)", "—")))
 
             st.markdown("#### Raw PnL metrics")
             raw = [
@@ -412,9 +427,9 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
                     "Sortino (252d)": kpi.get("Sortino"),
                     "Profit factor": kpi.get("Profit Factor"),
                     "Risk / Return": (
-                        abs(kpi.get("Max DD (%)", np.nan)) / 100 /
-                        kpi.get("PnL (%)")
-                        if kpi.get("PnL (%)") not in (None, 0, np.nan) else np.nan
+                        abs(kpi.get("Max DD (%)", np.nan)) / 100 / kpi.get("PnL (%)")
+                        if kpi.get("PnL (%)") not in (None, 0, np.nan)
+                        else np.nan
                     ),
                 }
                 rcols = st.columns(4)
@@ -428,18 +443,19 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
             if long_ratio is None and not trades_df.empty and "side" in trades_df:
                 long_ratio = (trades_df["side"].str.upper() == "BUY").mean()
 
-            st.metric("Long ratio",
-                      _fmt_pct(long_ratio) if long_ratio is not None else "—")
+            st.metric(
+                "Long ratio", _fmt_pct(long_ratio) if long_ratio is not None else "—"
+            )
             st.metric("Positions", run_meta.get("Total positions", "—"))
             st.metric("Trades", len(trades_df) if not trades_df.empty else 0)
-
-
 
     # ① Price & Trades --------------------------------------------------------
     st.subheader("📉 Price & Trades")
     fig_pt = go.Figure()
     fig_pt = go.Figure()
-    fig_pt.add_trace(go.Scatter(x=price_series.index, y=price_series, mode="lines", name="Price"))
+    fig_pt.add_trace(
+        go.Scatter(x=price_series.index, y=price_series, mode="lines", name="Price")
+    )
 
     if not trades_df.empty:
         print("entry_side", trades_df.get("entry_side", "").str.upper())
@@ -506,7 +522,9 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
     )
 
     if not equity_df.empty:
-        dd = (equity_df["equity"].cummax() - equity_df["equity"]) / equity_df["equity"].cummax()
+        dd = (equity_df["equity"].cummax() - equity_df["equity"]) / equity_df[
+            "equity"
+        ].cummax()
         tabs_eq[1].plotly_chart(
             px.area(x=dd.index, y=dd.values, template=TPL),
             use_container_width=True,
@@ -553,19 +571,22 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
         # ── Distribution & VaR ───────────────────────────────────────────────
         var5 = np.percentile(strategy_returns, 5)
         hist = px.histogram(
-            strategy_returns,
-            nbins=60,
-            template=TPL,
-            title="Return distribution"
+            strategy_returns, nbins=60, template=TPL, title="Return distribution"
         )
         hist.add_vline(x=var5, line_color=NEG, annotation_text="VaR 5%")
         risk_tabs[0].plotly_chart(hist, use_container_width=True)
 
         # ── Rolling metrics (по факту – одно значение на конец периода) ─────
         fig_roll = go.Figure()
-        fig_roll.add_trace(go.Scatter(x=rsharp.index, y=rsharp, name="Sharpe (full window)"))
-        fig_roll.add_trace(go.Scatter(x=rvol.index, y=rvol, name="Volatility (full window)"))
-        fig_roll.add_trace(go.Scatter(x=rbeta.index, y=rbeta, name="Beta (full window)"))
+        fig_roll.add_trace(
+            go.Scatter(x=rsharp.index, y=rsharp, name="Sharpe (full window)")
+        )
+        fig_roll.add_trace(
+            go.Scatter(x=rvol.index, y=rvol, name="Volatility (full window)")
+        )
+        fig_roll.add_trace(
+            go.Scatter(x=rbeta.index, y=rbeta, name="Beta (full window)")
+        )
         fig_roll.update_layout(template=TPL, height=350, legend_orientation="h")
         risk_tabs[1].plotly_chart(fig_roll, use_container_width=True)
 
@@ -579,15 +600,17 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
         )
 
         monthly_heat = (
-            strategy_returns
-            .resample("M").sum()
+            strategy_returns.resample("M")
+            .sum()
             .to_frame("ret")
             .assign(
                 Year=lambda d: d.index.year,
                 Month=lambda d: d.index.month_name().str[:3],
             )
         )
-        pivot = monthly_heat.pivot(index="Year", columns="Month", values="ret").fillna(0)
+        pivot = monthly_heat.pivot(index="Year", columns="Month", values="ret").fillna(
+            0
+        )
         heatmap = px.imshow(
             pivot,
             color_continuous_scale="RdYlGn",
@@ -612,7 +635,11 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
                 ).dt.total_seconds() / 3600.0
             st.plotly_chart(
                 px.histogram(
-                    trades_df, x="duration_h", nbins=40, template=TPL, title="Trade duration (h)"
+                    trades_df,
+                    x="duration_h",
+                    nbins=40,
+                    template=TPL,
+                    title="Trade duration (h)",
                 ),
                 use_container_width=True,
             )
@@ -646,10 +673,13 @@ def draw_dashboard(result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str)
     st.markdown("---")
 
     # ⑤ Metrics, raw log & engine stats --------------------------------------
-    tab_metrics, tab_log, tab_extra = st.tabs(["Key metrics", "Trades log", "Engine stats"])
+    tab_metrics, tab_log, tab_extra = st.tabs(
+        ["Key metrics", "Trades log", "Engine stats"]
+    )
     tab_metrics.dataframe(
-        pd.DataFrame.from_dict({**kpi, **extra_stats}, orient="index", columns=["Value"])
-        .style.format("{:.4f}")
+        pd.DataFrame.from_dict(
+            {**kpi, **extra_stats}, orient="index", columns=["Value"]
+        ).style.format("{:.4f}")
     )
 
     if not trades_df.empty:
@@ -692,7 +722,7 @@ with st.sidebar:
     if info.doc:
         st.caption(info.doc)
 
-    timeframe = st.selectbox("Timeframe", ["1min", "15min"])
+    connector = DataConnector()
 
     # ── Data source tabs ────────────────────────────────────────────────
     st.markdown(
@@ -702,19 +732,65 @@ with st.sidebar:
     csv_path = None
     symbol = None
     exchange = None
-    run_bt_csv = False
-    run_bt_ch = False
-    tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"])
-    with tab_csv:
-        csv_path = "BINANCE_BTCUSD, 1.csv" if timeframe == "1min" else "BINANCE_BTCUSD, 15.csv"
+    csv_exchs = connector.get_exchanges("CSV")
+    csv_syms = connector.get_symbols("CSV", csv_exchs[0] if csv_exchs else None)
+    csv_tfs = connector.get_timeframes("CSV")
+    ch_exchs = connector.get_exchanges("ClickHouse")
+    ch_tfs = connector.get_timeframes("ClickHouse")
+    tf_csv = csv_tfs[0] if csv_tfs else ""
+    tf_ch = ch_tfs[0] if ch_tfs else ""
+    start_csv = datetime.utcnow().date() - timedelta(days=30)
+    end_csv = datetime.utcnow().date()
+    start_ch = start_csv
+    end_ch = end_csv
+    tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"], key="data_src_tab")
+        exchange_csv = csv_exchs[0] if csv_exchs else ""
+        symbol_csv = csv_syms[0] if csv_syms else ""
+
+        row1[0].text_input(
+            "Exchange",
+            exchange_csv,
+            disabled=True,
+            key="csv_exch",
+        )
+        row1[1].text_input(
+            "Symbol",
+            symbol_csv,
+            disabled=True,
+            key="csv_sym",
+        )
+        tf_csv = row1[2].selectbox(
+            "TimeFrame",
+            csv_tfs,
+            index=0,
+            key="csv_tf",
+        )
+
+        row2 = st.columns(2)
+        start_csv = row2[0].date_input(
+            "Date from",
+            start_csv,
+            key="csv_start",
+        )
+        end_csv = row2[1].date_input(
+            "Date to",
+            end_csv,
+            key="csv_end",
+        )
+
+        if csv_exchs and csv_syms:
+            csv_path = connector.get_csv_path(csv_exchs[0], csv_syms[0], tf_csv)
+        else:
+            csv_path = ""
         st.write(f"Data file: **{csv_path}**")
-        run_bt_csv = st.button("Run back‑test", key="run_bt_csv")
-
     with tab_ch:
-        symbol = st.text_input("Symbol", "BTCUSDT")
-        exchange = st.text_input("Exchange", "BINANCE")
-        run_bt_ch = st.button("Run back‑test", key="run_bt_ch")
-
+        row1 = st.columns(3)
+        exchange = row1[0].selectbox("Exchange", ch_exchs, key="ch_exch")
+        symbol = row1[1].text_input("Symbol", "BTCUSDT", key="ch_sym")
+        tf_ch = row1[2].selectbox("TimeFrame", ch_tfs, key="ch_tf")
+        row2 = st.columns(2)
+        start_ch = row2[0].date_input("Date from", start_ch, key="ch_start")
+        end_ch = row2[1].date_input("Date to", end_ch, key="ch_end")
     st.subheader("Parameters")
     params: Dict[str, Any] = {}
     for field, ann in info.cfg_cls.__annotations__.items():
@@ -724,13 +800,22 @@ with st.sidebar:
         label = field.replace("_", " ").title()
 
         if isinstance(default, bool) or issub(ann, bool):
-            params[field] = st.checkbox(label, value=bool(default) if default is not None else False)
+            params[field] = st.checkbox(
+                label, value=bool(default) if default is not None else False
+            )
         elif isinstance(default, int) or issub(ann, int):
-            params[field] = st.number_input(label, value=int(default) if default is not None else 0,
-                                            step=1, format="%d")
+            params[field] = st.number_input(
+                label,
+                value=int(default) if default is not None else 0,
+                step=1,
+                format="%d",
+            )
         elif isinstance(default, (float, Decimal)) or issub(ann, (float, Decimal)):
-            params[field] = st.number_input(label, value=float(default) if default is not None else 0.0,
-                                            format="%.6f")
+            params[field] = st.number_input(
+                label,
+                value=float(default) if default is not None else 0.0,
+                format="%.6f",
+            )
         else:
             params[field] = st.text_input(label, value=str(default or ""))
 
@@ -739,27 +824,28 @@ with st.sidebar:
     ACCENT, NEG = ("#10B981", "#EF4444") if theme == "Light" else ("#22D3EE", "#F43F5E")
 
     st.markdown("---")
-
-# ╭──────────────────────── run back‑test on click ────────────────────────────╮
-run_bt = run_bt_csv or run_bt_ch
-if run_bt_csv:
-    data_source = "CSV"
-    data_spec = csv_path
-elif run_bt_ch:
-    data_source = "ClickHouse"
-    data_spec = {
-        "exchange": exchange,
-        "symbol": symbol,
-        "timeframe": "1m" if timeframe == "1min" else "15m",
-    }
-
-if run_bt:
+    run_bt = st.button("Run back‑test", key="run_backtest")
+    tab_idx = st.session_state.get("data_src_tab", 0)
+    if tab_idx == 0:
+        data_source = "CSV"
+        data_spec = csv_path
+        start_dt = pd.to_datetime(start_csv)
+        end_dt = pd.to_datetime(end_csv) + pd.Timedelta(days=1)
+    else:
+        data_source = "ClickHouse"
+        data_spec = {
+            "exchange": exchange,
+            "symbol": symbol,
+            "timeframe": (tf_ch[:-3] + "m") if tf_ch.endswith("min") else tf_ch,
+            "start": datetime.combine(start_ch, datetime.min.time()),
+            "end": datetime.combine(end_ch, datetime.min.time()),
+        }
+        start_dt = datetime.combine(start_ch, datetime.min.time())
+        end_dt = datetime.combine(end_ch, datetime.min.time())
+        }
     with st.spinner("Running back‑test… please wait"):
-        if data_source == "ClickHouse":
-            ch = ClickHouseConnector()
-            data_df = ch.candles(**data_spec, auto_clip=True)
-        else:
-            data_df = load_ohlcv_csv(data_spec)
+        connector = DataConnector()
+        data_df = connector.load(data_source, data_spec, start=start_dt, end=end_dt)
 
         log_stream = io.StringIO()
         with redirect_stdout(log_stream), redirect_stderr(log_stream):
