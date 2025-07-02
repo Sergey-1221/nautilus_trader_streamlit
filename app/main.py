@@ -744,6 +744,8 @@ with st.sidebar:
     start_ch = start_csv
     end_ch = end_csv
     tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"], key="data_src_tab")
+    with tab_csv:
+        row1 = st.columns(3)
         exchange_csv = csv_exchs[0] if csv_exchs else ""
         symbol_csv = csv_syms[0] if csv_syms else ""
 
@@ -842,7 +844,6 @@ with st.sidebar:
         }
         start_dt = datetime.combine(start_ch, datetime.min.time())
         end_dt = datetime.combine(end_ch, datetime.min.time())
-        }
     with st.spinner("Running back‑test… please wait"):
         connector = DataConnector()
         data_df = connector.load(data_source, data_spec, start=start_dt, end=end_dt)
