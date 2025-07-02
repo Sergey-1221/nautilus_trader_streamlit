@@ -703,7 +703,9 @@ with st.sidebar:
     symbol = None
     exchange = None
     csv_exchs = connector.get_exchanges("CSV")
-    csv_syms = connector.get_symbols("CSV", csv_exchs[0] if csv_exchs else None)
+    csv_syms = connector.get_symbols(
+        "CSV", csv_exchs[0] if csv_exchs else None
+    )
     csv_tfs = connector.get_timeframes("CSV")
     ch_exchs = connector.get_exchanges("ClickHouse")
     ch_tfs = connector.get_timeframes("ClickHouse")
@@ -714,15 +716,18 @@ with st.sidebar:
     start_ch = start_csv
     end_ch = end_csv
     tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"], key="data_src_tab")
+        exchange_csv = csv_exchs[0] if csv_exchs else ""
+        symbol_csv = csv_syms[0] if csv_syms else ""
+
         row1[0].text_input(
             "Exchange",
-            csv_exchs[0] if csv_exchs else "",
+            exchange_csv,
             disabled=True,
             key="csv_exch",
         )
         row1[1].text_input(
             "Symbol",
-            csv_syms[0] if csv_syms else "",
+            symbol_csv,
             disabled=True,
             key="csv_sym",
         )
