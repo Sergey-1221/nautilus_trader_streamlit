@@ -719,18 +719,8 @@ with st.sidebar:
         exchange_csv = csv_exchs[0] if csv_exchs else ""
         symbol_csv = csv_syms[0] if csv_syms else ""
 
-        row1[0].text_input(
-            "Exchange",
-            exchange_csv,
-            disabled=True,
-            key="csv_exch",
-        )
-        row1[1].text_input(
-            "Symbol",
-            symbol_csv,
-            disabled=True,
-            key="csv_sym",
-        )
+        row1[0].text_input("Exchange", exchange_csv, disabled=True, key="csv_exch")
+        row1[1].text_input("Symbol", symbol_csv, disabled=True, key="csv_sym")
         tf_csv = row1[2].selectbox(
             "TimeFrame",
             csv_tfs,
