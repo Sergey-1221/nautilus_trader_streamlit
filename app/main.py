@@ -810,3 +810,4 @@ with st.sidebar:
         log_text = log_stream.getvalue()
 
     draw_dashboard(result, log_text, TPL, ACCENT, NEG)
+

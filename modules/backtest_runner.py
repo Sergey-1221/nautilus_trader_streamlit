@@ -594,3 +594,4 @@ def run_backtest(
         'positions_count': positions_count,
         'commissions': commissions,
     }
+
