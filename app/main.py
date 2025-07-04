@@ -421,14 +421,16 @@ def draw_dashboard(
             hdr[2].metric("Elapsed", run_meta["Elapsed time"])
             hdr[3].metric("Orders", run_meta["Total orders"])
 
-            kcols = st.columns(len(kpi))
-            for (label, value), col in zip(kpi.items(), kcols):
-                icon = KPI_ICONS.get(label, "")
-                tip = KPI_TOOLTIPS.get(label, "")
-                is_pct = label in KPI_PCT_LABELS
-                precision = 0 if label == "Max DD (days)" else 2
-                text = _fmt_pct(value) if is_pct else _fmt_num(value, precision)
-                col.metric(f"{icon} {label}", text, help=tip)
+            items = list(kpi.items())
+            for i in range(0, len(items), 4):
+                row = st.columns(4)
+                for (label, value), col in zip(items[i : i + 4], row):
+                    icon = KPI_ICONS.get(label, "")
+                    tip = KPI_TOOLTIPS.get(label, "")
+                    is_pct = label in KPI_PCT_LABELS
+                    precision = 0 if label == "Max DD (days)" else 2
+                    text = _fmt_pct(value) if is_pct else _fmt_num(value, precision)
+                    col.metric(f"{icon} {label}", text, help=tip)
 
         # === Tab 1: Balances & Fees ==============================================
         with perf_tabs[1]:
