@@ -831,8 +831,8 @@ with st.sidebar:
     if data_src == "CSV":
         data_source = "CSV"
         data_spec = csv_path
-        start_dt = pd.to_datetime(start_csv)
-        end_dt = pd.to_datetime(end_csv) + pd.Timedelta(days=1)
+        start_dt = pd.to_datetime(start_csv, utc=True)
+        end_dt = pd.to_datetime(end_csv, utc=True) + pd.Timedelta(days=1)
     else:
         data_source = "ClickHouse"
         data_spec = {
