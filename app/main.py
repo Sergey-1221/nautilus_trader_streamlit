@@ -347,6 +347,13 @@ def draw_dashboard(
         "Win Rate": "Share of profitable trades",
     }
 
+    _fmt_pct = lambda v: (
+        "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{v:+.2%}"
+    )
+    _fmt_num = lambda v, p=2: (
+        "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{v:,.{p}f}"
+    )
+
     extra_stats = parse_extra_stats(log_text)
 
     # ╭──────────────────── 📄  RUN METADATA (collapsed) ──────────────────────╮
@@ -406,13 +413,6 @@ def draw_dashboard(
             col.metric(f"{icon} {key}", text, help=tip)
 
     # ╭──────────────────── 💹 ACCOUNT & Performance ────────────────────────────╮
-
-    _fmt_pct = lambda v: (
-        "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{v:+.2%}"
-    )
-    _fmt_num = lambda v, p=2: (
-        "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{v:,.{p}f}"
-    )
 
     with st.container(border=True):
         st.subheader("💹 Account & Performance")
