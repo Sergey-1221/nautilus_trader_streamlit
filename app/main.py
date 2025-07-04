@@ -28,6 +28,7 @@ from modules.strategy_loader import discover_strategies
 from modules.backtest_runner import run_backtest
 from modules.dashboard_actor import DashboardPublisher  # optional, only if supported
 from modules.data_connector import DataConnector
+from modules.csv_data import load_ohlcv_csv
 from datetime import timedelta
 
 # ───────────────────────────── Streamlit page ────────────────────────────────
@@ -739,8 +740,20 @@ with st.sidebar:
     ch_tfs = connector.get_timeframes("ClickHouse")
     tf_csv = csv_tfs[0] if csv_tfs else ""
     tf_ch = ch_tfs[0] if ch_tfs else ""
-    start_csv = datetime.utcnow().date() - timedelta(days=30)
-    end_csv = datetime.utcnow().date()
+
+    # Default date range based on available CSV data
+    if csv_exchs and csv_syms and tf_csv:
+        try:
+            _default_path = connector.get_csv_path(csv_exchs[0], csv_syms[0], tf_csv)
+            _df_info = load_ohlcv_csv(_default_path)
+            start_csv = _df_info.index[0].date()
+            end_csv = _df_info.index[-1].date()
+        except Exception:
+            start_csv = datetime.utcnow().date() - timedelta(days=30)
+            end_csv = datetime.utcnow().date()
+    else:
+        start_csv = datetime.utcnow().date() - timedelta(days=30)
+        end_csv = datetime.utcnow().date()
     start_ch = start_csv
     end_ch = end_csv
     data_src = st.radio("Data source", ["CSV", "ClickHouse"], horizontal=True, key="data_src_tab")
@@ -847,6 +860,10 @@ with st.sidebar:
     with st.spinner("Running back‑test… please wait"):
         connector = DataConnector()
         data_df = connector.load(data_source, data_spec, start=start_dt, end=end_dt)
+
+        if data_df.empty:
+            st.error("No data found for the selected date range.")
+            st.stop()
 
         log_stream = io.StringIO()
         with redirect_stdout(log_stream), redirect_stderr(log_stream):
