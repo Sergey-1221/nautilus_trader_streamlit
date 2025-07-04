@@ -386,33 +386,6 @@ def draw_dashboard(
     with st.container(border=True):
         st.subheader("💹 Account & Performance")
 
-        overview_keys = [
-            "PnL ($)",
-            "PnL (%)",
-            "Annual Return",
-            "Max DD (%)",
-            "Max DD (days)",
-            "Win Rate",
-            "Sharpe",
-            "Sortino",
-            "Profit Factor",
-        ]
-        ocols = st.columns(len(overview_keys))
-        pct_labels = {
-            "PnL (%)",
-            "Win Rate",
-            "Max DD (%)",
-            "Annual Return",
-            "Time in Market",
-        }
-        for key, col in zip(overview_keys, ocols):
-            val = kpi.get(key)
-            icon = KPI_ICONS.get(key, "")
-            tip = KPI_TOOLTIPS.get(key, "")
-            is_pct = key in pct_labels
-            precision = 0 if key == "Max DD (days)" else 2
-            text = _fmt_pct(val) if is_pct else _fmt_num(val, precision)
-            col.metric(f"{icon} {key}", text, help=tip)
 
         # ------------------------------------------------------------------
         # We analyse the entire back-test by default.
@@ -439,6 +412,34 @@ def draw_dashboard(
             hdr[1].metric("Finished", _fmt_dt(run_meta["Run finished"]))
             hdr[2].metric("Elapsed", run_meta["Elapsed time"])
             hdr[3].metric("Orders", run_meta["Total orders"])
+
+            overview_keys = [
+                "PnL ($)",
+                "PnL (%)",
+                "Annual Return",
+                "Max DD (%)",
+                "Max DD (days)",
+                "Win Rate",
+                "Sharpe",
+                "Sortino",
+                "Profit Factor",
+            ]
+            ocols = st.columns(len(overview_keys))
+            pct_labels = {
+                "PnL (%)",
+                "Win Rate",
+                "Max DD (%)",
+                "Annual Return",
+                "Time in Market",
+            }
+            for key, col in zip(overview_keys, ocols):
+                val = kpi.get(key)
+                icon = KPI_ICONS.get(key, "")
+                tip = KPI_TOOLTIPS.get(key, "")
+                is_pct = key in pct_labels
+                precision = 0 if key == "Max DD (days)" else 2
+                text = _fmt_pct(val) if is_pct else _fmt_num(val, precision)
+                col.metric(f"{icon} {key}", text, help=tip)
 
             # KPI grid
             kcols = st.columns(len(kpi))
