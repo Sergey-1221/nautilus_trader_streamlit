@@ -11,7 +11,7 @@ import inspect
 import io
 import uuid
 from contextlib import redirect_stdout, redirect_stderr
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, get_origin
 
@@ -196,8 +196,8 @@ def draw_dashboard(
     # ── 0. basic run metadata (needed multiple times) ------------------------
     run_meta = {
         "Run ID": getattr(result, "run_id", uuid.uuid4()),
-        "Run started": result.get("run_started", datetime.utcnow()),
-        "Run finished": result.get("run_finished", datetime.utcnow()),
+        "Run started": result.get("run_started", datetime.now(timezone.utc)),
+        "Run finished": result.get("run_finished", datetime.now(timezone.utc)),
         "Elapsed time": result.get("elapsed", "—"),
         "Backtest start": result["price_df"].index[0],
         "Backtest end": result["price_df"].index[-1],
@@ -459,7 +459,6 @@ def draw_dashboard(
     )
 
     if not trades_df.empty:
-        print("entry_side", trades_df.get("entry_side", "").str.upper())
         buys = trades_df[trades_df.get("entry_side", "").str.upper() == "LONG"]
         sells = trades_df[trades_df.get("entry_side", "").str.upper() == "SELL"]
 
@@ -506,21 +505,26 @@ def draw_dashboard(
     st.subheader("📈 Equity | Drawdown | Fees")
     tabs_eq = st.tabs(["Equity", "Drawdown", "Fees"])
 
-    start_balance_series = pd.Series(equity_df["equity"].iloc[0], index=equity_df.index)
-    eq_plot_df = pd.DataFrame(
-        {"Equity": equity_df["equity"], "Start Balance": start_balance_series}
-    ).dropna()
+    if not equity_df.empty:
+        start_balance_series = pd.Series(
+            equity_df["equity"].iloc[0], index=equity_df.index
+        )
+        eq_plot_df = pd.DataFrame(
+            {"Equity": equity_df["equity"], "Start Balance": start_balance_series}
+        ).dropna()
 
-    tabs_eq[0].plotly_chart(
-        px.line(
-            eq_plot_df,
-            x=eq_plot_df.index,
-            y=["Equity", "Start Balance"],
-            template=TPL,
-            labels={"value": "Series value", "variable": "Series"},
-        ),
-        use_container_width=True,
-    )
+        tabs_eq[0].plotly_chart(
+            px.line(
+                eq_plot_df,
+                x=eq_plot_df.index,
+                y=["Equity", "Start Balance"],
+                template=TPL,
+                labels={"value": "Series value", "variable": "Series"},
+            ),
+            use_container_width=True,
+        )
+    else:
+        tabs_eq[0].info("Equity data unavailable.")
 
     if not equity_df.empty:
         dd = (equity_df["equity"].cummax() - equity_df["equity"]) / equity_df[
@@ -749,11 +753,11 @@ with st.sidebar:
             start_csv = _df_info.index[0].date()
             end_csv = _df_info.index[-1].date()
         except Exception:
-            start_csv = datetime.utcnow().date() - timedelta(days=30)
-            end_csv = datetime.utcnow().date()
+            start_csv = datetime.now(timezone.utc).date() - timedelta(days=30)
+            end_csv = datetime.now(timezone.utc).date()
     else:
-        start_csv = datetime.utcnow().date() - timedelta(days=30)
-        end_csv = datetime.utcnow().date()
+        start_csv = datetime.now(timezone.utc).date() - timedelta(days=30)
+        end_csv = datetime.now(timezone.utc).date()
     start_ch = start_csv
     end_ch = end_csv
     data_src = st.radio("Data source", ["CSV", "ClickHouse"], horizontal=True, key="data_src_tab")

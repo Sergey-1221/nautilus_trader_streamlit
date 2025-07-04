@@ -362,7 +362,6 @@ def run_backtest(
     # 2) Fills ➜ DataFrame (patched section)
     # Используем generate_order_fills_report, как в исходном коде
     fills_raw = engine.trader.generate_order_fills_report()
-    print("fills_raw", fills_raw)
 
     fills_df = _order_fills_to_dataframe(fills_raw)
 
