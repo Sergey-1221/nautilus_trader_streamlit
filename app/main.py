@@ -11,7 +11,7 @@ import inspect
 import io
 import uuid
 from contextlib import redirect_stdout, redirect_stderr
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, get_origin
 
@@ -28,6 +28,7 @@ from modules.strategy_loader import discover_strategies
 from modules.backtest_runner import run_backtest
 from modules.dashboard_actor import DashboardPublisher  # optional, only if supported
 from modules.data_connector import DataConnector
+from modules.csv_data import load_ohlcv_csv
 from datetime import timedelta
 
 # ───────────────────────────── Streamlit page ────────────────────────────────
@@ -195,8 +196,8 @@ def draw_dashboard(
     # ── 0. basic run metadata (needed multiple times) ------------------------
     run_meta = {
         "Run ID": getattr(result, "run_id", uuid.uuid4()),
-        "Run started": result.get("run_started", datetime.utcnow()),
-        "Run finished": result.get("run_finished", datetime.utcnow()),
+        "Run started": result.get("run_started", datetime.now(timezone.utc)),
+        "Run finished": result.get("run_finished", datetime.now(timezone.utc)),
         "Elapsed time": result.get("elapsed", "—"),
         "Backtest start": result["price_df"].index[0],
         "Backtest end": result["price_df"].index[-1],
@@ -458,7 +459,6 @@ def draw_dashboard(
     )
 
     if not trades_df.empty:
-        print("entry_side", trades_df.get("entry_side", "").str.upper())
         buys = trades_df[trades_df.get("entry_side", "").str.upper() == "LONG"]
         sells = trades_df[trades_df.get("entry_side", "").str.upper() == "SELL"]
 
@@ -505,21 +505,29 @@ def draw_dashboard(
     st.subheader("📈 Equity | Drawdown | Fees")
     tabs_eq = st.tabs(["Equity", "Drawdown", "Fees"])
 
-    start_balance_series = pd.Series(equity_df["equity"].iloc[0], index=equity_df.index)
-    eq_plot_df = pd.DataFrame(
-        {"Equity": equity_df["equity"], "Start Balance": start_balance_series}
-    ).dropna()
+    if not equity_df.empty:
+        first_equity = (
+            equity_df["equity"].dropna().iloc[0]
+            if not equity_df["equity"].dropna().empty
+            else 0.0
+        )
+        start_balance_series = pd.Series(first_equity, index=equity_df.index)
+        eq_plot_df = pd.DataFrame(
+            {"Equity": equity_df["equity"], "Start Balance": start_balance_series}
+        ).dropna()
 
-    tabs_eq[0].plotly_chart(
-        px.line(
-            eq_plot_df,
-            x=eq_plot_df.index,
-            y=["Equity", "Start Balance"],
-            template=TPL,
-            labels={"value": "Series value", "variable": "Series"},
-        ),
-        use_container_width=True,
-    )
+        tabs_eq[0].plotly_chart(
+            px.line(
+                eq_plot_df,
+                x=eq_plot_df.index,
+                y=["Equity", "Start Balance"],
+                template=TPL,
+                labels={"value": "Series value", "variable": "Series"},
+            ),
+            use_container_width=True,
+        )
+    else:
+        tabs_eq[0].info("Equity data unavailable.")
 
     if not equity_df.empty:
         dd = (equity_df["equity"].cummax() - equity_df["equity"]) / equity_df[
@@ -739,11 +747,26 @@ with st.sidebar:
     ch_tfs = connector.get_timeframes("ClickHouse")
     tf_csv = csv_tfs[0] if csv_tfs else ""
     tf_ch = ch_tfs[0] if ch_tfs else ""
-    start_csv = datetime.utcnow().date() - timedelta(days=30)
-    end_csv = datetime.utcnow().date()
+
+    # Default date range based on available CSV data
+    if csv_exchs and csv_syms and tf_csv:
+        try:
+            _default_path = connector.get_csv_path(csv_exchs[0], csv_syms[0], tf_csv)
+            _df_info = load_ohlcv_csv(_default_path)
+            start_csv = _df_info.index[0].date()
+            end_csv = _df_info.index[-1].date()
+        except Exception:
+            start_csv = datetime.now(timezone.utc).date() - timedelta(days=30)
+            end_csv = datetime.now(timezone.utc).date()
+    else:
+        start_csv = datetime.now(timezone.utc).date() - timedelta(days=30)
+        end_csv = datetime.now(timezone.utc).date()
     start_ch = start_csv
     end_ch = end_csv
-    tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"], key="data_src_tab")
+    data_src = st.radio("Data source", ["CSV", "ClickHouse"], horizontal=True, key="data_src_tab")
+    tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"])
+    with tab_csv:
+        row1 = st.columns(3)
         exchange_csv = csv_exchs[0] if csv_exchs else ""
         symbol_csv = csv_syms[0] if csv_syms else ""
 
@@ -825,12 +848,11 @@ with st.sidebar:
 
     st.markdown("---")
     run_bt = st.button("Run back‑test", key="run_backtest")
-    tab_idx = st.session_state.get("data_src_tab", 0)
-    if tab_idx == 0:
+    if data_src == "CSV":
         data_source = "CSV"
         data_spec = csv_path
-        start_dt = pd.to_datetime(start_csv)
-        end_dt = pd.to_datetime(end_csv) + pd.Timedelta(days=1)
+        start_dt = pd.to_datetime(start_csv, utc=True)
+        end_dt = pd.to_datetime(end_csv, utc=True) + pd.Timedelta(days=1)
     else:
         data_source = "ClickHouse"
         data_spec = {
@@ -842,10 +864,13 @@ with st.sidebar:
         }
         start_dt = datetime.combine(start_ch, datetime.min.time())
         end_dt = datetime.combine(end_ch, datetime.min.time())
-        }
     with st.spinner("Running back‑test… please wait"):
         connector = DataConnector()
         data_df = connector.load(data_source, data_spec, start=start_dt, end=end_dt)
+
+        if data_df.empty:
+            st.error("No data found for the selected date range.")
+            st.stop()
 
         log_stream = io.StringIO()
         with redirect_stdout(log_stream), redirect_stderr(log_stream):
