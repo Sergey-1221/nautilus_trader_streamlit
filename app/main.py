@@ -347,6 +347,14 @@ def draw_dashboard(
         "Win Rate": "Share of profitable trades",
     }
 
+    KPI_PCT_LABELS = {
+        "PnL (%)",
+        "Win Rate",
+        "Max DD (%)",
+        "Annual Return",
+        "Time in Market",
+    }
+
     _fmt_pct = lambda v: (
         "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{v:+.2%}"
     )
@@ -413,48 +421,14 @@ def draw_dashboard(
             hdr[2].metric("Elapsed", run_meta["Elapsed time"])
             hdr[3].metric("Orders", run_meta["Total orders"])
 
-            overview_keys = [
-                "PnL ($)",
-                "PnL (%)",
-                "Annual Return",
-                "Max DD (%)",
-                "Max DD (days)",
-                "Win Rate",
-                "Sharpe",
-                "Sortino",
-                "Profit Factor",
-            ]
-            ocols = st.columns(len(overview_keys))
-            pct_labels = {
-                "PnL (%)",
-                "Win Rate",
-                "Max DD (%)",
-                "Annual Return",
-                "Time in Market",
-            }
-            for key, col in zip(overview_keys, ocols):
-                val = kpi.get(key)
-                icon = KPI_ICONS.get(key, "")
-                tip = KPI_TOOLTIPS.get(key, "")
-                is_pct = key in pct_labels
-                precision = 0 if key == "Max DD (days)" else 2
-                text = _fmt_pct(val) if is_pct else _fmt_num(val, precision)
-                col.metric(f"{icon} {key}", text, help=tip)
-
-            # KPI grid
             kcols = st.columns(len(kpi))
-            summary_pct_labels = {
-                "PnL (%)",
-                "Win Rate",
-                "Max DD (%)",
-                "Annual Return",
-                "Time in Market",
-            }
             for (label, value), col in zip(kpi.items(), kcols):
                 icon = KPI_ICONS.get(label, "")
-                is_pct = label in summary_pct_labels
-                text = _fmt_pct(value) if is_pct else _fmt_num(value)
-                col.metric(f"{icon} {label}", text)
+                tip = KPI_TOOLTIPS.get(label, "")
+                is_pct = label in KPI_PCT_LABELS
+                precision = 0 if label == "Max DD (days)" else 2
+                text = _fmt_pct(value) if is_pct else _fmt_num(value, precision)
+                col.metric(f"{icon} {label}", text, help=tip)
 
         # === Tab 1: Balances & Fees ==============================================
         with perf_tabs[1]:
