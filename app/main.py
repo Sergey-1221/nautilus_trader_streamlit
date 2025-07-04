@@ -381,9 +381,11 @@ def draw_dashboard(
                 unsafe_allow_html=True,
             )
 
-    # ╭──────────────────── 📊 OVERVIEW ─────────────────────────────────────╮
+    # ╭──────────────────── 💹 ACCOUNT & Performance ────────────────────────────╮
+
     with st.container(border=True):
-        st.subheader("📊 Overview")
+        st.subheader("💹 Account & Performance")
+
         overview_keys = [
             "PnL ($)",
             "PnL (%)",
@@ -411,11 +413,6 @@ def draw_dashboard(
             precision = 0 if key == "Max DD (days)" else 2
             text = _fmt_pct(val) if is_pct else _fmt_num(val, precision)
             col.metric(f"{icon} {key}", text, help=tip)
-
-    # ╭──────────────────── 💹 ACCOUNT & Performance ────────────────────────────╮
-
-    with st.container(border=True):
-        st.subheader("💹 Account & Performance")
 
         # ------------------------------------------------------------------
         # We analyse the entire back-test by default.
