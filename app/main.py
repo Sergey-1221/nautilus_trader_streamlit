@@ -506,9 +506,12 @@ def draw_dashboard(
     tabs_eq = st.tabs(["Equity", "Drawdown", "Fees"])
 
     if not equity_df.empty:
-        start_balance_series = pd.Series(
-            equity_df["equity"].iloc[0], index=equity_df.index
+        first_equity = (
+            equity_df["equity"].dropna().iloc[0]
+            if not equity_df["equity"].dropna().empty
+            else 0.0
         )
+        start_balance_series = pd.Series(first_equity, index=equity_df.index)
         eq_plot_df = pd.DataFrame(
             {"Equity": equity_df["equity"], "Start Balance": start_balance_series}
         ).dropna()
