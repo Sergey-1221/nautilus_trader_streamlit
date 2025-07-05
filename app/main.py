@@ -452,7 +452,7 @@ def draw_dashboard(
             tim = kpi.get("Time in Market")
             if tim is not None and not (isinstance(tim, float) and np.isnan(tim)):
                 st.write("Time in Market")
-                st.progress(float(tim))
+                st.progress(float(tim) / 100)
         # === Tab 1: Balances & Fees ==============================================
         with perf_tabs[1]:
             bal_cols = st.columns(4)
