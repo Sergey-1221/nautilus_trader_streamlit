@@ -367,6 +367,27 @@ def draw_dashboard(
             end = series.index[-1]
         return start, end
 
+    def current_dd_days(series: pd.Series) -> float:
+        """Duration in days of the current drawdown."""
+        if series.empty:
+            return np.nan
+        cummax = series.cummax()
+        if series.iloc[-1] >= cummax.iloc[-1]:
+            return 0.0
+        peaks = series[cummax.diff().fillna(0) > 0]
+        last_peak = peaks.index[-1] if not peaks.empty else series.index[0]
+        return float((series.index[-1] - last_peak).days)
+
+    def avg_dd_pct(series: pd.Series) -> float:
+        """Average drawdown magnitude in percent."""
+        dd = (series.cummax() - series) / series.cummax()
+        dds = [dd.loc[s:e].max() for s, e in dd_periods(series)]
+        return float(np.mean(dds) * 100) if dds else np.nan
+
+    def dd_count(series: pd.Series) -> int:
+        """Number of drawdown periods."""
+        return len(dd_periods(series))
+
     comm_total = sum(result.get("commissions", {}).values())
 
     # Additional performance metrics
@@ -424,6 +445,26 @@ def draw_dashboard(
     dd_start, dd_end = (
         longest_dd_span(equity_df["equity"]) if not equity_df.empty else (pd.NaT, pd.NaT)
     )
+    current_dd_len = current_dd_days(equity_df["equity"]) if not equity_df.empty else np.nan
+    avg_dd_pct_val = avg_dd_pct(equity_df["equity"]) if not equity_df.empty else np.nan
+    dd_total = dd_count(equity_df["equity"]) if not equity_df.empty else 0
+
+    var5 = np.percentile(strategy_returns, 5) if not strategy_returns.empty else np.nan
+    cvar5 = (
+        strategy_returns[strategy_returns <= var5].mean()
+        if not strategy_returns.empty
+        else np.nan
+    )
+    calmar = (
+        annual_return / (abs(max_dd_pct) / 100)
+        if max_dd_pct not in (0, np.nan) and not np.isnan(annual_return)
+        else np.nan
+    )
+    romad = (
+        total_return / (abs(max_dd_pct) / 100)
+        if max_dd_pct not in (0, np.nan) and not np.isnan(total_return)
+        else np.nan
+    )
 
     kpi = {
         "PnL ($)": result.get("metrics", {}).get("total_profit", np.nan),
@@ -452,6 +493,13 @@ def draw_dashboard(
         "Time in Market": tim,
         "Avg Trade (h)": avg_trade_h,
         "Edge vs B&H (%)": bh_edge,
+        "Current DD (days)": current_dd_len,
+        "Avg DD (%)": avg_dd_pct_val,
+        "Drawdowns": dd_total,
+        "VaR 5%": var5,
+        "CVaR 5%": cvar5,
+        "Calmar": calmar,
+        "RoMaD": romad,
     }
     KPI_ICONS = {
         "PnL ($)": "💰",
@@ -471,6 +519,13 @@ def draw_dashboard(
         "Time in Market": "⏱️",
         "Avg Trade (h)": "⏳",
         "Edge vs B&H (%)": "🏁",
+        "Current DD (days)": "📉",
+        "Avg DD (%)": "📉",
+        "Drawdowns": "🔻",
+        "VaR 5%": "🚩",
+        "CVaR 5%": "🚩",
+        "Calmar": "🏊",
+        "RoMaD": "📏",
     }
 
     KPI_TOOLTIPS = {
@@ -490,6 +545,13 @@ def draw_dashboard(
         "Win Rate": "Share of profitable trades",
         "Avg Trade (h)": "Average trade duration in hours",
         "Edge vs B&H (%)": "Strategy performance relative to buy-and-hold",
+        "Current DD (days)": "Days since last equity peak",
+        "Avg DD (%)": "Average drawdown depth",
+        "Drawdowns": "Number of drawdown periods",
+        "VaR 5%": "Value at Risk at 5%",
+        "CVaR 5%": "Conditional VaR at 5%",
+        "Calmar": "CAGR divided by max drawdown",
+        "RoMaD": "Return over maximum drawdown",
     }
 
     KPI_PCT_LABELS = {
@@ -499,6 +561,9 @@ def draw_dashboard(
         "Annual Return",
         "Time in Market",
         "Edge vs B&H (%)",
+        "Avg DD (%)",
+        "VaR 5%",
+        "CVaR 5%",
     }
 
     def _fmt_pct(v: float | None) -> str:
@@ -580,6 +645,8 @@ def draw_dashboard(
                 "Annual Return",
                 "Profit/DD",
                 "Edge vs B&H (%)",
+                "Calmar",
+                "RoMaD",
             ]
             trade_order = [
                 "Win Rate",
@@ -595,6 +662,11 @@ def draw_dashboard(
                 "Total DD (days)",
                 "Max DD ($)",
                 "Volatility (252d)",
+                "Current DD (days)",
+                "Avg DD (%)",
+                "Drawdowns",
+                "VaR 5%",
+                "CVaR 5%",
             ]
 
             for order in (perf_order, trade_order, risk_order):
@@ -824,8 +896,9 @@ def draw_dashboard(
         dd_full = (equity_df["equity"].cummax() - equity_df["equity"]) / equity_df[
             "equity"
         ].cummax()
-        dd = dd_full.loc[start:end]
-        fig_dd = px.area(x=dd.index, y=dd.values, template=TPL)
+        dd = -dd_full.loc[start:end]
+        fig_dd = px.area(x=dd.index, y=dd.values * 100, template=TPL)
+        fig_dd.update_layout(title="Underwater plot", yaxis_title="Drawdown (%)")
         if pd.notna(dd_start) and pd.notna(dd_end):
             fig_dd.add_vrect(
                 x0=dd_start,
@@ -863,8 +936,8 @@ def draw_dashboard(
     # ③ Risk & Seasonality ----------------------------------------------------
     st.subheader("📊 Risk & Seasonality")
 
-    # окно скольжения берём на весь доступный период
-    roll = len(strategy_returns) if not strategy_returns.empty else 1
+    # окно скольжения ~6 месяцев или меньше, если данных мало
+    roll = min(len(strategy_returns), 126) if not strategy_returns.empty else 1
 
     if strategy_returns.empty:
         st.info("Not enough data for risk calculations.")
@@ -875,26 +948,68 @@ def draw_dashboard(
         rsharp = strategy_returns.rolling(roll).apply(lambda s: sharpe(s)).dropna()
 
         with st.expander("Advanced analysis", expanded=False):
-            risk_tabs = st.tabs(["Distribution & VaR", "Rolling metrics", "Seasonality"])
+            risk_tabs = st.tabs([
+                "Distribution & VaR",
+                "Rolling metrics",
+                "Seasonality",
+                "Risk radar",
+            ])
 
             # ── Distribution & VaR ───────────────────────────────────────────────
-            var5 = np.percentile(strategy_returns, 5)
-            hist = px.histogram(
-                strategy_returns, nbins=60, template=TPL, title="Return distribution"
-            )
-            hist.add_vline(x=var5, line_color=NEG, annotation_text="VaR 5%")
-            risk_tabs[0].plotly_chart(hist, use_container_width=True)
+            with risk_tabs[0]:
+                bins = st.slider("Bins", min_value=20, max_value=120, value=60, step=10)
+                level = st.slider("Confidence level (%)", min_value=90, max_value=99, value=95)
+                var_thres = 100 - level
+                var_val = np.percentile(strategy_returns, var_thres)
+                cvar_val = strategy_returns[strategy_returns <= var_val].mean()
 
-            # ── Rolling metrics (по факту – одно значение на конец периода) ─────
+                hist = px.histogram(
+                    strategy_returns,
+                    nbins=bins,
+                    template=TPL,
+                    title="Return distribution",
+                )
+                hist.add_vline(x=var_val, line_color=NEG, annotation_text=f"VaR {100-level}%")
+                st.plotly_chart(hist, use_container_width=True)
+
+                gcol1, gcol2 = st.columns(2)
+                gfig1 = go.Figure(
+                    go.Indicator(
+                        mode="gauge+number",
+                        value=var_val * 100,
+                        number={"suffix": "%"},
+                        title={"text": f"VaR {level}%"},
+                        gauge={
+                            "axis": {"range": [min(var_val * 100 * 1.5, -20), 0]},
+                            "bar": {"color": NEG},
+                        },
+                    )
+                )
+                gfig2 = go.Figure(
+                    go.Indicator(
+                        mode="gauge+number",
+                        value=cvar_val * 100,
+                        number={"suffix": "%"},
+                        title={"text": f"CVaR {level}%"},
+                        gauge={
+                            "axis": {"range": [min(cvar_val * 100 * 1.5, -20), 0]},
+                            "bar": {"color": NEG},
+                        },
+                    )
+                )
+                gcol1.plotly_chart(gfig1, use_container_width=True)
+                gcol2.plotly_chart(gfig2, use_container_width=True)
+
+            # ── Rolling metrics ─────────────────────────────────────────────
             fig_roll = go.Figure()
             fig_roll.add_trace(
-                go.Scatter(x=rsharp.index, y=rsharp, name="Sharpe (full window)")
+                go.Scatter(x=rsharp.index, y=rsharp, name="Rolling Sharpe")
             )
             fig_roll.add_trace(
-                go.Scatter(x=rvol.index, y=rvol, name="Volatility (full window)")
+                go.Scatter(x=rvol.index, y=rvol, name="Rolling Volatility")
             )
             fig_roll.add_trace(
-                go.Scatter(x=rbeta.index, y=rbeta, name="Beta (full window)")
+                go.Scatter(x=rbeta.index, y=rbeta, name="Rolling Beta")
             )
             fig_roll.update_layout(template=TPL, height=350, legend_orientation="h")
             risk_tabs[1].plotly_chart(fig_roll, use_container_width=True)
@@ -925,10 +1040,72 @@ def draw_dashboard(
                 color_continuous_scale="RdYlGn",
                 template=TPL,
                 title="Monthly return heatmap",
+                text_auto=".2%",
             )
 
-            risk_tabs[2].plotly_chart(week_bar, use_container_width=True)
-            risk_tabs[2].plotly_chart(heatmap, use_container_width=True)
+            with risk_tabs[2]:
+                st.plotly_chart(week_bar, use_container_width=True)
+                st.plotly_chart(heatmap, use_container_width=True)
+                # Intraday seasonality
+                median_diff = strategy_returns.index.to_series().diff().median()
+                if pd.notna(median_diff) and median_diff < pd.Timedelta(days=1):
+                    hr_ret = strategy_returns.groupby(strategy_returns.index.hour).mean() * 100
+                    hour_bar = px.bar(
+                        x=list(range(24)),
+                        y=hr_ret.reindex(range(24)).fillna(0),
+                        template=TPL,
+                        title="Average return by hour",
+                    )
+                    st.plotly_chart(hour_bar, use_container_width=True)
+
+                # Calendar heatmap by week/day
+                daily_ret = strategy_returns.resample("D").sum() * 100
+                if not daily_ret.empty:
+                    cal = daily_ret.to_frame("ret")
+                    cal["Week"] = cal.index.isocalendar().week.astype(int)
+                    cal["Day"] = cal.index.weekday
+                    cal["Year"] = cal.index.year
+                    for year in cal["Year"].unique():
+                        piv = cal[cal["Year"] == year].pivot(index="Day", columns="Week", values="ret")
+                        cfig = px.imshow(
+                            piv,
+                            color_continuous_scale="RdYlGn",
+                            template=TPL,
+                            origin="lower",
+                            aspect="auto",
+                            title=f"Daily returns calendar {year}",
+                            labels=dict(x="Week", y="Day"),
+                            text_auto=".1f",
+                        )
+                        cfig.update_yaxes(
+                            tickmode="array",
+                            tickvals=list(range(7)),
+                            ticktext=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+                        )
+                        st.plotly_chart(cfig, use_container_width=True)
+
+            # ── Risk radar ─────────────────────────────────────────────────
+            with risk_tabs[3]:
+                radar_vals = {
+                    "Volatility": (rvol.iloc[-1] * 100) if not rvol.empty else np.nan,
+                    "VaR": abs(var5 * 100) if not np.isnan(var5) else np.nan,
+                    "CVaR": abs(cvar5 * 100) if not np.isnan(cvar5) else np.nan,
+                    "Max DD": abs(max_dd_pct) if not np.isnan(max_dd_pct) else np.nan,
+                }
+                rfig = go.Figure(
+                    go.Scatterpolar(
+                        r=list(radar_vals.values()),
+                        theta=list(radar_vals.keys()),
+                        fill="toself",
+                        name="Risk profile",
+                    )
+                )
+                rfig.update_layout(
+                    template=TPL,
+                    polar=dict(radialaxis=dict(visible=True)),
+                    showlegend=False,
+                )
+                st.plotly_chart(rfig, use_container_width=True)
 
     st.markdown("---")
 
