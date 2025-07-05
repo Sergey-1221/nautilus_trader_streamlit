@@ -184,6 +184,24 @@ def style_trades(df: pd.DataFrame) -> pd.DataFrame | pd.Styler:
     return df
 
 
+def rebuild_equity_curve(
+    price_index: pd.DatetimeIndex,
+    trades_df: pd.DataFrame,
+    start_balance: float = 10_000,
+) -> pd.Series:
+    """Construct a basic equity curve from trade profits."""
+    if trades_df.empty:
+        return pd.Series(start_balance, index=price_index)
+
+    pnl = trades_df.sort_values("exit_time").set_index("exit_time")["profit"].cumsum()
+    pnl = pnl.reindex(price_index, method="ffill").fillna(0.0)
+    equity = start_balance + pnl
+    # Ensure all timestamps present
+    equity = equity.reindex(price_index, method="ffill")
+    equity.iloc[0] = start_balance
+    return equity
+
+
 # ╭──────────────────────── dashboard renderer ───────────────────────────────╮
 def draw_dashboard(
     result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str
@@ -220,6 +238,15 @@ def draw_dashboard(
             df.index = pd.to_datetime(df.index)
 
     price_series = price_df["close"] if "close" in price_df else price_df.iloc[:, 0]
+
+    if equity_df.empty and not price_series.empty:
+        start_balance = (
+            result.get("initial_balances", {}).get("USDT")
+            or 10_000
+        )
+        equity_df = pd.DataFrame(
+            {"equity": rebuild_equity_curve(price_df.index, trades_df, start_balance)}
+        )
 
     # ── 2. fast KPI calc -----------------------------------------------------
     strategy_returns = (
