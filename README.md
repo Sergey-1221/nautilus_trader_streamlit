@@ -34,6 +34,9 @@ pip install -r requirements.txt
 streamlit run app/main.py
 ```
 
+The requirements file installs `streamlit-lightweight-charts-v5` so the price
+charts render correctly on Python 3.12.
+
 ## 📈 Equity & Drawdown
 
 The dashboard visualizes how the account balance evolves and how deep the drawdowns were.
