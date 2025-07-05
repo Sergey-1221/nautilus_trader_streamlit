@@ -33,6 +33,7 @@ from modules.backtest_runner import run_backtest
 from modules.dashboard_actor import DashboardPublisher  # optional, only if supported
 from modules.data_connector import DataConnector
 from modules.csv_data import load_ohlcv_csv
+DATA_DIR = pathlib.Path(__file__).resolve().parents[1]
 from datetime import timedelta
 
 # ───────────────────────────── Streamlit page ────────────────────────────────
@@ -1461,7 +1462,7 @@ with st.sidebar:
     if info.doc:
         st.caption(info.doc)
 
-    connector = DataConnector()
+    connector = DataConnector(csv_dir=DATA_DIR)
 
     # ── Data source tabs ────────────────────────────────────────────────
     st.markdown(
@@ -1596,7 +1597,7 @@ with st.sidebar:
         start_dt = datetime.combine(start_ch, datetime.min.time())
         end_dt = datetime.combine(end_ch, datetime.min.time())
     with st.spinner("Running back‑test… please wait"):
-        connector = DataConnector()
+        connector = DataConnector(csv_dir=DATA_DIR)
         data_df = connector.load(data_source, data_spec, start=start_dt, end=end_dt)
 
         if data_df.empty:
