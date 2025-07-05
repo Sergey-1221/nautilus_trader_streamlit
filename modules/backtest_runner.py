@@ -73,6 +73,7 @@ def dataframe_to_bars(
     # ── DataFrame → Bars ─────────────────────────────────────────────
     wrangler = BarDataWrangler(bar_type=bar_type, instrument=instr)
     bars = wrangler.process(df)
+    assert bars, "Bar list is empty"
 
     if not bars:
         raise RuntimeError("No bars produced – verify DataFrame structure.")
@@ -92,6 +93,7 @@ def load_bars(csv_path: str):
         raise FileNotFoundError(f"CSV file not found: {csv_path}")
 
     df = pd.read_csv(csv_file, decimal=".")
+    assert not df.empty, "CSV is empty"
 
     # Map lowercase column names ➜ original names
     col_map = {col.lower(): col for col in df.columns}
@@ -136,17 +138,19 @@ def load_bars(csv_path: str):
 
     ts = df["timestamp"]
     if pd.api.types.is_numeric_dtype(ts):
-        max_ts = ts.max()
-        # Adjusted logic based on common timestamp scales
-        if max_ts > 2e18:  # Likely nanoseconds (max int64 is ~9e18)
+        ts_int = pd.to_numeric(ts, errors="coerce").astype("Int64")
+        digits = ts_int.dropna().astype(str).str.len().mode()[0]
+        if digits >= 18:
             unit = "ns"
-        elif max_ts > 2e15:  # Likely microseconds
+        elif digits >= 16:
             unit = "us"
-        elif max_ts > 2e12:  # Likely milliseconds
+        elif digits >= 13:
             unit = "ms"
-        else:  # Likely seconds
+        else:
             unit = "s"
-        df["timestamp"] = pd.to_datetime(ts, unit=unit, utc=True)
+        df["timestamp"] = pd.to_datetime(
+            ts_int, unit=unit, origin="unix", utc=True
+        )
     else:
         df["timestamp"] = pd.to_datetime(ts, utc=True, errors="coerce")
 
@@ -212,6 +216,7 @@ def load_bars(csv_path: str):
     # Use BarDataWrangler
     wrangler = BarDataWrangler(bar_type=bar_type, instrument=instr)
     bars = wrangler.process(df)
+    assert bars, "Bar list is empty"
 
     if not bars:
         raise RuntimeError("No bars produced—verify CSV structure and column types.")

@@ -85,14 +85,19 @@ def load_ohlcv_csv(csv_path: str) -> pd.DataFrame:
     # ── timestamp → datetime UTC
     ts = df["timestamp"]
     if pd.api.types.is_numeric_dtype(ts):
-        max_ts = ts.max()
-        unit = (
-            "ns" if max_ts > 2e18 else
-            "us" if max_ts > 2e15 else
-            "ms" if max_ts > 2e12 else
-            "s"
+        ts_int = pd.to_numeric(ts, errors="coerce").astype("Int64")
+        digits = ts_int.dropna().astype(str).str.len().mode()[0]
+        if digits >= 18:
+            unit = "ns"
+        elif digits >= 16:
+            unit = "us"
+        elif digits >= 13:
+            unit = "ms"
+        else:
+            unit = "s"
+        df["timestamp"] = pd.to_datetime(
+            ts_int, unit=unit, origin="unix", utc=True
         )
-        df["timestamp"] = pd.to_datetime(ts, unit=unit, utc=True)
     else:
         df["timestamp"] = pd.to_datetime(ts, utc=True, errors="coerce")
 
