@@ -947,7 +947,7 @@ def draw_dashboard(
         rbeta = (cov / benchmark_returns.rolling(roll).var(ddof=0)).dropna()
         rsharp = strategy_returns.rolling(roll).apply(lambda s: sharpe(s)).dropna()
 
-        with st.expander("Advanced analysis", expanded=False):
+        with st.expander("Advanced analysis", expanded=True):
             risk_tabs = st.tabs([
                 "Distribution & VaR",
                 "Rolling metrics",
