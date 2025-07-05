@@ -63,7 +63,8 @@ st.markdown(
     .tv-lightweight-charts__copyright {
         display:none !important;
     }
-    .tv-lightweight-charts__logo {
+    .tv-lightweight-charts__logo,
+    #tv-attr-logo {
         display:none !important;
     }
     </style>
