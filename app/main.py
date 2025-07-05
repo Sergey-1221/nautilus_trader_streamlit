@@ -501,12 +501,17 @@ def draw_dashboard(
         "Edge vs B&H (%)",
     }
 
-    _fmt_pct = lambda v: (
-        "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{v:+.2%}"
-    )
-    _fmt_num = lambda v, p=2: (
-        "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{v:,.{p}f}"
-    )
+    def _fmt_pct(v: float | None) -> str:
+        """Return value formatted as a percentage or an em dash."""
+        if v is None or (isinstance(v, float) and np.isnan(v)):
+            return "—"
+        return f"{v:+.2%}"
+
+    def _fmt_num(v: float | None, p: int = 2) -> str:
+        """Return number with thousands separator or an em dash."""
+        if v is None or (isinstance(v, float) and np.isnan(v)):
+            return "—"
+        return f"{v:,.{p}f}"
 
     extra_stats = parse_extra_stats(log_text)
 
