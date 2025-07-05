@@ -41,7 +41,18 @@ You can focus on any time range using the built‑in date slider and toggle loga
 
 The longest drawdown is highlighted on both charts. Additional metrics show its duration, the average and total time spent in drawdowns, and the deepest loss in dollars.
 
+## 📊 Risk analysis
+
+The **Risk & Seasonality** block aggregates several metrics:
+
+* **Distribution & VaR** – interactive histogram of returns with adjustable bins. A slider lets you change the VaR confidence level (90–99%), and gauges display VaR and CVaR values.
+* **Rolling metrics** – rolling Sharpe ratio, volatility and beta (six‑month window by default) reveal how the risk profile changes over time.
+* **Seasonality** – average return by weekday and a monthly heatmap with return values on hover. For intraday data an additional chart shows average return by hour. A calendar heatmap visualizes daily returns across the year.
+* **Risk radar** – polar chart comparing volatility, VaR, CVaR and max drawdown for a quick overview of the risk profile.
+* **Additional risk KPIs** – current drawdown duration, average drawdown depth, drawdown count, VaR/CVaR at 5%, Calmar ratio and RoMaD. The drawdown chart doubles as an underwater plot highlighting equity dips.
+
 ---
+
 
 ## 📌 Roadmap
 
