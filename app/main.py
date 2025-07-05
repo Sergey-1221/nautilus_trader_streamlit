@@ -222,8 +222,6 @@ def draw_dashboard(
     """
 
     # ── 0. basic run metadata (needed multiple times) ------------------------
-    is_dark = TPL == "plotly_dark"
-
     run_meta = {
         "Run ID": getattr(result, "run_id", uuid.uuid4()),
         "Run started": result.get("run_started", datetime.now(timezone.utc)),
@@ -944,14 +942,7 @@ def draw_dashboard(
             ]
             series.append({"histogram": {"data": volume_data, "color": "#d1d5db"}})
 
-        chart_opts = {
-            "layout": {
-                "background": {"color": "#111827" if is_dark else "#ffffff"},
-                "textColor": "#d1d5db" if is_dark else "#374151",
-            }
-        }
-
-        renderLightweightCharts(series, options=chart_opts, key="price_chart")
+        renderLightweightCharts(series, key="price_chart")
 
     st.markdown("---")
 
