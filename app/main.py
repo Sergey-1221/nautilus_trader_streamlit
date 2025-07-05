@@ -190,10 +190,16 @@ def rebuild_equity_curve(
     start_balance: float = 10_000,
 ) -> pd.Series:
     """Construct a basic equity curve from trade profits."""
+    price_index = pd.to_datetime(price_index)
+    if getattr(price_index, "tz", None) is not None:
+        price_index = price_index.tz_convert(None)
+
     if trades_df.empty:
         return pd.Series(start_balance, index=price_index)
 
     pnl = trades_df.sort_values("exit_time").set_index("exit_time")["profit"].cumsum()
+    if getattr(pnl.index, "tz", None) is not None:
+        pnl.index = pnl.index.tz_convert(None)
     pnl = pnl.reindex(price_index, method="ffill").fillna(0.0)
     equity = start_balance + pnl
     # Ensure all timestamps present
@@ -236,6 +242,14 @@ def draw_dashboard(
     for df in (price_df, equity_df, trades_df):
         if not df.empty and not isinstance(df.index, pd.DatetimeIndex):
             df.index = pd.to_datetime(df.index)
+        if not df.empty and getattr(df.index, "tz", None) is not None:
+            df.index = df.index.tz_convert(None)
+
+    for col in ("entry_time", "exit_time"):
+        if col in trades_df.columns:
+            trades_df[col] = pd.to_datetime(trades_df[col])
+            if getattr(trades_df[col].dt, "tz", None) is not None:
+                trades_df[col] = trades_df[col].dt.tz_convert(None)
 
     price_series = price_df["close"] if "close" in price_df else price_df.iloc[:, 0]
 
