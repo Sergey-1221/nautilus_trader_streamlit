@@ -23,8 +23,11 @@ import plotly.graph_objects as go
 import streamlit as st
 try:
     from lightweight_charts_v5 import lightweight_charts_v5_component as lwc
-except ImportError:
-    lwc = None
+except Exception:
+    try:  # older package name
+        from streamlit_lightweight_charts import renderLightweightCharts as lwc
+    except Exception:  # component unavailable
+        lwc = None
 
 # ────────────────────────────── local code ───────────────────────────────────
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
@@ -33,6 +36,7 @@ from modules.backtest_runner import run_backtest
 from modules.dashboard_actor import DashboardPublisher  # optional, only if supported
 from modules.data_connector import DataConnector
 from modules.csv_data import load_ohlcv_csv
+DATA_DIR = pathlib.Path(__file__).resolve().parents[1]
 from datetime import timedelta
 
 # ───────────────────────────── Streamlit page ────────────────────────────────
@@ -837,9 +841,120 @@ def draw_dashboard(
     has_volume = "volume" in price_df.columns
 
     if lwc is None:
-        st.error(
-            "streamlit-lightweight-charts-v5 is required for this section."
+        st.info(
+            "streamlit-lightweight-charts-v5 not installed. Using Plotly fallback.",
         )
+
+        fig = go.Figure()
+        if price_style == "Candlesticks" and {"open", "high", "low", "close"}.issubset(
+            price_df.columns
+        ):
+            fig.add_trace(
+                go.Candlestick(
+                    x=price_df.index,
+                    open=price_df["open"],
+                    high=price_df["high"],
+                    low=price_df["low"],
+                    close=price_df["close"],
+                    name="Price",
+                )
+            )
+        else:
+            fig.add_trace(
+                go.Scatter(
+                    x=price_series.index,
+                    y=price_series.values,
+                    mode="lines",
+                    name="Price",
+                )
+            )
+
+        if show_sma:
+            sma = price_series.rolling(50).mean()
+            fig.add_trace(
+                go.Scatter(
+                    x=sma.index,
+                    y=sma.values,
+                    mode="lines",
+                    line=dict(color="#6366f1"),
+                    name="50 SMA",
+                )
+            )
+
+        if show_ema:
+            ema = price_series.ewm(span=21, adjust=False).mean()
+            fig.add_trace(
+                go.Scatter(
+                    x=ema.index,
+                    y=ema.values,
+                    mode="lines",
+                    line=dict(color="#fbbf24"),
+                    name="21 EMA",
+                )
+            )
+
+        if not trades_df.empty:
+            buys = trades_df[trades_df.get("entry_side", "").str.upper() == "LONG"]
+            sells = trades_df[trades_df.get("entry_side", "").str.upper() == "SELL"]
+
+            if show_long and not buys.empty:
+                fig.add_trace(
+                    go.Scatter(
+                        x=buys["entry_time"],
+                        y=buys["entry_price"],
+                        mode="markers",
+                        marker_symbol="triangle-up",
+                        marker_color=ACCENT,
+                        name="Buy",
+                    )
+                )
+
+            if show_short and not sells.empty:
+                fig.add_trace(
+                    go.Scatter(
+                        x=sells["entry_time"],
+                        y=sells["entry_price"],
+                        mode="markers",
+                        marker_symbol="triangle-down",
+                        marker_color=NEG,
+                        name="Sell",
+                    )
+                )
+
+            if show_exit and {"exit_time", "profit"}.issubset(trades_df.columns):
+                fig.add_trace(
+                    go.Scatter(
+                        x=trades_df["exit_time"],
+                        y=trades_df["exit_price"],
+                        mode="markers",
+                        marker_symbol="circle",
+                        marker_color="#6b7280",
+                        name="Exit",
+                    )
+                )
+
+        if has_volume:
+            fig.add_trace(
+                go.Bar(
+                    x=price_df.index,
+                    y=price_df["volume"],
+                    name="Volume",
+                    marker_color="#d1d5db",
+                    yaxis="y2",
+                )
+            )
+            fig.update_layout(
+                yaxis2=dict(
+                    overlaying="y",
+                    side="right",
+                    showgrid=False,
+                    title="Volume",
+                )
+            )
+
+        fig.update_layout(template=TPL, height=600 if has_volume else 420)
+        st.plotly_chart(fig, use_container_width=True)
+
     else:
         series = []
 
@@ -967,7 +1082,117 @@ def draw_dashboard(
             },
         }]
 
-        lwc(name="price_chart", charts=charts, height=600 if has_volume else 420)
+        try:
+            lwc(name="price_chart", charts=charts, height=600 if has_volume else 420)
+        except Exception:
+            st.warning("Failed to render lightweight chart. Using Plotly fallback.")
+            fig = go.Figure()
+            if price_style == "Candlesticks" and {"open", "high", "low", "close"}.issubset(price_df.columns):
+                fig.add_trace(
+                    go.Candlestick(
+                        x=price_df.index,
+                        open=price_df["open"],
+                        high=price_df["high"],
+                        low=price_df["low"],
+                        close=price_df["close"],
+                        name="Price",
+                    )
+                )
+            else:
+                fig.add_trace(
+                    go.Scatter(
+                        x=price_series.index,
+                        y=price_series.values,
+                        mode="lines",
+                        name="Price",
+                    )
+                )
+
+            if show_sma:
+                sma = price_series.rolling(50).mean()
+                fig.add_trace(
+                    go.Scatter(
+                        x=sma.index,
+                        y=sma.values,
+                        mode="lines",
+                        line=dict(color="#6366f1"),
+                        name="50 SMA",
+                    )
+                )
+
+            if show_ema:
+                ema = price_series.ewm(span=21, adjust=False).mean()
+                fig.add_trace(
+                    go.Scatter(
+                        x=ema.index,
+                        y=ema.values,
+                        mode="lines",
+                        line=dict(color="#fbbf24"),
+                        name="21 EMA",
+                    )
+                )
+
+            if not trades_df.empty:
+                buys = trades_df[trades_df.get("entry_side", "").str.upper() == "LONG"]
+                sells = trades_df[trades_df.get("entry_side", "").str.upper() == "SELL"]
+
+                if show_long and not buys.empty:
+                    fig.add_trace(
+                        go.Scatter(
+                            x=buys["entry_time"],
+                            y=buys["entry_price"],
+                            mode="markers",
+                            marker_symbol="triangle-up",
+                            marker_color=ACCENT,
+                            name="Buy",
+                        )
+                    )
+
+                if show_short and not sells.empty:
+                    fig.add_trace(
+                        go.Scatter(
+                            x=sells["entry_time"],
+                            y=sells["entry_price"],
+                            mode="markers",
+                            marker_symbol="triangle-down",
+                            marker_color=NEG,
+                            name="Sell",
+                        )
+                    )
+
+                if show_exit and {"exit_time", "profit"}.issubset(trades_df.columns):
+                    fig.add_trace(
+                        go.Scatter(
+                            x=trades_df["exit_time"],
+                            y=trades_df["exit_price"],
+                            mode="markers",
+                            marker_symbol="circle",
+                            marker_color="#6b7280",
+                            name="Exit",
+                        )
+                    )
+
+            if has_volume:
+                fig.add_trace(
+                    go.Bar(
+                        x=price_df.index,
+                        y=price_df["volume"],
+                        name="Volume",
+                        marker_color="#d1d5db",
+                        yaxis="y2",
+                    )
+                )
+                fig.update_layout(
+                    yaxis2=dict(
+                        overlaying="y",
+                        side="right",
+                        showgrid=False,
+                        title="Volume",
+                    )
+                )
+
+            fig.update_layout(template=TPL, height=600 if has_volume else 420)
+            st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
 
@@ -1350,7 +1575,7 @@ with st.sidebar:
     if info.doc:
         st.caption(info.doc)
 
-    connector = DataConnector()
+    connector = DataConnector(csv_dir=DATA_DIR)
 
     # ── Data source tabs ────────────────────────────────────────────────
     st.markdown(
@@ -1485,7 +1710,7 @@ with st.sidebar:
         start_dt = datetime.combine(start_ch, datetime.min.time())
         end_dt = datetime.combine(end_ch, datetime.min.time())
     with st.spinner("Running back‑test… please wait"):
-        connector = DataConnector()
+        connector = DataConnector(csv_dir=DATA_DIR)
         data_df = connector.load(data_source, data_spec, start=start_dt, end=end_dt)
 
         if data_df.empty:
