@@ -37,6 +37,44 @@ streamlit run app/main.py
 The requirements file installs `streamlit-lightweight-charts-v5` so the price
 charts render correctly on Python 3.12.
 
+## 📈 Lightweight Charts Example
+
+This snippet renders a candlestick chart using the component:
+
+```python
+import streamlit as st
+from lightweight_charts_v5 import lightweight_charts_v5_component as lwc
+import yfinance as yf
+
+df = yf.download("AAPL", period="6mo", interval="1d")
+ohlc = [
+    {
+        "time": str(idx.date()),
+        "open": float(r.Open),
+        "high": float(r.High),
+        "low": float(r.Low),
+        "close": float(r.Close),
+    }
+    for idx, r in df.iterrows()
+]
+
+lwc(
+    name="AAPL chart",
+    charts=[{
+        "series": [{
+            "type": "Candlestick",
+            "data": ohlc,
+            "options": {"upColor": "#26a69a", "downColor": "#ef5350"},
+        }],
+        "height": 450,
+    }],
+    height=450,
+)
+```
+
+Make sure each series dictionary includes the correct `type` key to avoid
+"Unsupported series type" errors.
+
 ## 📈 Equity & Drawdown
 
 The dashboard visualizes how the account balance evolves and how deep the drawdowns were.
