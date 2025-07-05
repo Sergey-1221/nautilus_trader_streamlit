@@ -1267,158 +1267,115 @@ def draw_dashboard(
                 ).dt.total_seconds() / 3600.0
 
             start_balance = float(equity_df["equity"].iloc[0]) if not equity_df.empty else 0.0
-
-            # ── Top charts: PnL distribution & trade duration ─────────────
-            hist_left, hist_right = st.columns(2)
-            profit_mean = df_view["profit"].mean()
-            profit_med = df_view["profit"].median()
-            skew_val = df_view["profit"].skew()
-            kurt_val = df_view["profit"].kurt()
-            with hist_left:
-                fig_pnl = px.histogram(
-                    df_view,
-                    x="profit",
-                    nbins=40,
-                    template=TPL,
-                    title="PnL per trade",
-                )
-                fig_pnl.add_vline(x=float(profit_mean), line_dash="dash", line_color=ACCENT)
-                fig_pnl.add_vline(x=float(profit_med), line_dash="dot", line_color=NEG)
-                st.plotly_chart(fig_pnl, use_container_width=True)
-                st.caption(f"Skewness: {skew_val:.2f}, Kurtosis: {kurt_val:.2f}")
-            with hist_right:
-                st.plotly_chart(
-                    px.histogram(
-                        df_view,
-                        x="duration_h",
-                        nbins=40,
-                        template=TPL,
-                        title="Trade duration (h)",
-                    ),
-                    use_container_width=True,
-                )
-
-            # ── Bottom charts: Win/Loss & Long/Short breakdown ──────────
-            pie_left, pie_right = st.columns(2)
             wins = (df_view["profit"] > 0).sum()
             losses = (df_view["profit"] <= 0).sum()
-            with pie_left:
-                st.plotly_chart(
-                    px.pie(
-                        values=[wins, losses],
-                        names=["Wins", "Losses"],
-                        template=TPL,
-                        title="Win / Loss",
-                    ),
-                    use_container_width=True,
-                )
             long_count = (df_view["entry_side"].str.upper() == "LONG").sum()
             short_count = (df_view["entry_side"].str.upper() == "SHORT").sum()
-            with pie_right:
+
+            stats_tabs = st.tabs(["Distributions", "Breakdown", "Analysis"])
+
+            # ── Tab 0: Distributions ------------------------------------
+            with stats_tabs[0]:
+                h_left, h_right = st.columns(2)
+                profit_mean = df_view["profit"].mean()
+                profit_med = df_view["profit"].median()
+                skew_val = df_view["profit"].skew()
+                kurt_val = df_view["profit"].kurt()
+                with h_left:
+                    fig_pnl = px.histogram(df_view, x="profit", nbins=40, template=TPL, title="PnL per trade")
+                    fig_pnl.add_vline(x=float(profit_mean), line_dash="dash", line_color=ACCENT)
+                    fig_pnl.add_vline(x=float(profit_med), line_dash="dot", line_color=NEG)
+                    st.plotly_chart(fig_pnl, use_container_width=True)
+                    st.caption(f"Skewness: {skew_val:.2f}, Kurtosis: {kurt_val:.2f}")
+                with h_right:
+                    st.plotly_chart(
+                        px.histogram(df_view, x="duration_h", nbins=40, template=TPL, title="Trade duration (h)"),
+                        use_container_width=True,
+                    )
                 st.plotly_chart(
-                    px.pie(
-                        values=[long_count, short_count],
-                        names=["Long", "Short"],
-                        template=TPL,
-                        title="Long / Short",
-                    ),
+                    px.scatter(df_view, x="duration_h", y="profit", template=TPL, title="PnL vs duration"),
                     use_container_width=True,
                 )
 
-            # ── Scatter: PnL vs duration --------------------------------
-            st.plotly_chart(
-                px.scatter(
-                    df_view,
-                    x="duration_h",
-                    y="profit",
-                    template=TPL,
-                    title="PnL vs duration",
-                ),
-                use_container_width=True,
-            )
+            # ── Tab 1: Breakdown ----------------------------------------
+            with stats_tabs[1]:
+                p_left, p_right = st.columns(2)
+                with p_left:
+                    st.plotly_chart(
+                        px.pie(values=[wins, losses], names=["Wins", "Losses"], template=TPL, title="Win / Loss"),
+                        use_container_width=True,
+                    )
+                with p_right:
+                    st.plotly_chart(
+                        px.pie(values=[long_count, short_count], names=["Long", "Short"], template=TPL, title="Long / Short"),
+                        use_container_width=True,
+                    )
+                if tim is not None and not (isinstance(tim, float) and np.isnan(tim)):
+                    st.plotly_chart(
+                        px.pie(values=[tim, 100 - tim], names=["In position", "Flat"], template=TPL, title="Capital usage"),
+                        use_container_width=True,
+                    )
 
-            # ── Equity step by trade ------------------------------------
-            step_df = df_view.sort_values("exit_time").copy()
-            step_df["equity_after"] = start_balance + step_df["profit"].cumsum()
-            fig_step = px.line(
-                step_df,
-                x="exit_time",
-                y="equity_after",
-                template=TPL,
-                title="Equity after each trade",
-            )
-            fig_step.update_traces(line_shape="hv")
-            st.plotly_chart(fig_step, use_container_width=True)
+            # ── Tab 2: Analysis -----------------------------------------
+            with stats_tabs[2]:
+                wins_df = df_view[df_view["profit"] > 0]
+                losses_df = df_view[df_view["profit"] < 0]
 
-            # ── Trade analysis metrics ----------------------------------
-            wins_df = df_view[df_view["profit"] > 0]
-            losses_df = df_view[df_view["profit"] < 0]
+                def _max_run(series, cond):
+                    run = max_run = 0
+                    for val in series:
+                        if cond(val):
+                            run += 1
+                            max_run = max(max_run, run)
+                        else:
+                            run = 0
+                    return max_run
 
-            def _max_run(series, cond):
-                run = max_run = 0
-                for val in series:
-                    if cond(val):
-                        run += 1
-                        max_run = max(max_run, run)
-                    else:
-                        run = 0
-                return max_run
-
-            profit_factor = (
-                wins_df["profit"].sum() / abs(losses_df["profit"].sum())
-                if not losses_df.empty and losses_df["profit"].sum() != 0
-                else np.nan
-            )
-
-            num_trades = len(df_view)
-            win_rate = wins / num_trades * 100 if num_trades > 0 else 0.0
-            avg_hold = df_view["duration_h"].mean()
-            avg_slippage = (
-                df_view["slippage"].mean() if "slippage" in df_view.columns else np.nan
-            )
-
-            metrics = {
-                "Trades": num_trades,
-                "Long trades": long_count,
-                "Short trades": short_count,
-                "Win rate (%)": win_rate,
-                "Avg profit per trade": df_view["profit"].mean(),
-                "Avg winning trade": wins_df["profit"].mean() if not wins_df.empty else 0.0,
-                "Avg losing trade": losses_df["profit"].mean() if not losses_df.empty else 0.0,
-                "Max win": df_view["profit"].max(),
-                "Max loss": df_view["profit"].min(),
-                "Avg holding time (h)": avg_hold,
-                "Avg slippage": avg_slippage,
-                "Profit factor": profit_factor,
-                "Max consecutive wins": _max_run(df_view["profit"], lambda x: x > 0),
-                "Max consecutive losses": _max_run(df_view["profit"], lambda x: x <= 0),
-            }
-
-            st.subheader("Trade analysis")
-            st.table(
-                pd.DataFrame.from_dict(metrics, orient="index", columns=["Value"]).style.format("{:.4f}")
-            )
-
-            top_n = 5
-            top_wins = df_view.nlargest(top_n, "profit")[["entry_time", "exit_time", "entry_side", "profit"]]
-            top_losses = df_view.nsmallest(top_n, "profit")[["entry_time", "exit_time", "entry_side", "profit"]]
-            with st.expander("Top trades", expanded=False):
-                col_win, col_loss = st.columns(2)
-                col_win.caption("Best trades")
-                col_win.dataframe(style_trades(top_wins), use_container_width=True)
-                col_loss.caption("Worst trades")
-                col_loss.dataframe(style_trades(top_losses), use_container_width=True)
-
-            if tim is not None and not (isinstance(tim, float) and np.isnan(tim)):
-                st.plotly_chart(
-                    px.pie(
-                        values=[tim, 100 - tim],
-                        names=["In position", "Flat"],
-                        template=TPL,
-                        title="Capital usage",
-                    ),
-                    use_container_width=True,
+                profit_factor = (
+                    wins_df["profit"].sum() / abs(losses_df["profit"].sum())
+                    if not losses_df.empty and losses_df["profit"].sum() != 0
+                    else np.nan
                 )
+
+                num_trades = len(df_view)
+                win_rate = wins / num_trades * 100 if num_trades > 0 else 0.0
+                avg_hold = df_view["duration_h"].mean()
+                avg_slippage = df_view["slippage"].mean() if "slippage" in df_view.columns else np.nan
+
+                metrics = {
+                    "Trades": num_trades,
+                    "Long trades": long_count,
+                    "Short trades": short_count,
+                    "Win rate (%)": win_rate,
+                    "Avg profit per trade": df_view["profit"].mean(),
+                    "Avg winning trade": wins_df["profit"].mean() if not wins_df.empty else 0.0,
+                    "Avg losing trade": losses_df["profit"].mean() if not losses_df.empty else 0.0,
+                    "Max win": df_view["profit"].max(),
+                    "Max loss": df_view["profit"].min(),
+                    "Avg holding time (h)": avg_hold,
+                    "Avg slippage": avg_slippage,
+                    "Profit factor": profit_factor,
+                    "Max consecutive wins": _max_run(df_view["profit"], lambda x: x > 0),
+                    "Max consecutive losses": _max_run(df_view["profit"], lambda x: x <= 0),
+                }
+
+                st.table(pd.DataFrame.from_dict(metrics, orient="index", columns=["Value"]).style.format("{:.4f}"))
+
+                step_df = df_view.sort_values("exit_time").copy()
+                step_df["equity_after"] = start_balance + step_df["profit"].cumsum()
+                fig_step = px.line(step_df, x="exit_time", y="equity_after", template=TPL, title="Equity after each trade")
+                fig_step.update_traces(line_shape="hv")
+                st.plotly_chart(fig_step, use_container_width=True)
+
+                top_n = 5
+                top_wins = df_view.nlargest(top_n, "profit")[["entry_time", "exit_time", "entry_side", "profit"]]
+                top_losses = df_view.nsmallest(top_n, "profit")[["entry_time", "exit_time", "entry_side", "profit"]]
+                with st.expander("Top trades", expanded=False):
+                    col_win, col_loss = st.columns(2)
+                    col_win.caption("Best trades")
+                    col_win.dataframe(style_trades(top_wins), use_container_width=True)
+                    col_loss.caption("Worst trades")
+                    col_loss.dataframe(style_trades(top_losses), use_container_width=True)
     else:
         st.info("No trades to display.")
     st.markdown("---")
