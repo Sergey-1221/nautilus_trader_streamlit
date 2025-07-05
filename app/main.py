@@ -1262,7 +1262,7 @@ def draw_dashboard(
                 border:1px solid #bdbdbd;
             }
             [data-testid="stBaseButton-pillsActive"] {
-                color:#fff;
+                color:#222;
             }
             div[data-testid="stBaseButton-pillsItem"]:nth-child(1)
               [data-testid="stBaseButton-pillsActive"]{
