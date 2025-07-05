@@ -846,18 +846,18 @@ def draw_dashboard(
         if price_style == "Candlesticks" and {"open", "high", "low", "close"}.issubset(price_df.columns):
             price_data = [
                 {
-                    "time": idx.isoformat(),
-                    "open": row["open"],
-                    "high": row["high"],
-                    "low": row["low"],
-                    "close": row["close"],
+                    "time": int(idx.timestamp()),
+                    "open": float(row["open"]),
+                    "high": float(row["high"]),
+                    "low": float(row["low"]),
+                    "close": float(row["close"]),
                 }
                 for idx, row in price_df.iterrows()
             ]
             main_series = {"type": "Candlestick", "data": price_data}
         else:
             price_data = [
-                {"time": idx.isoformat(), "value": val}
+                {"time": int(idx.timestamp()), "value": float(val)}
                 for idx, val in price_series.items()
             ]
             main_series = {"type": "Line", "data": price_data}
@@ -871,7 +871,7 @@ def draw_dashboard(
                 for _, row in buys.iterrows():
                     markers.append(
                         {
-                            "time": row["entry_time"].isoformat(),
+                            "time": int(pd.to_datetime(row["entry_time"]).timestamp()),
                             "position": "belowBar",
                             "color": ACCENT,
                             "shape": "arrowUp",
@@ -882,7 +882,7 @@ def draw_dashboard(
                 for _, row in sells.iterrows():
                     markers.append(
                         {
-                            "time": row["entry_time"].isoformat(),
+                            "time": int(pd.to_datetime(row["entry_time"]).timestamp()),
                             "position": "aboveBar",
                             "color": NEG,
                             "shape": "arrowDown",
@@ -893,7 +893,7 @@ def draw_dashboard(
                 for _, row in trades_df.iterrows():
                     markers.append(
                         {
-                            "time": row["exit_time"].isoformat(),
+                            "time": int(pd.to_datetime(row["exit_time"]).timestamp()),
                             "position": "aboveBar",
                             "color": "#6b7280",
                             "shape": "circle",
@@ -909,7 +909,7 @@ def draw_dashboard(
         if show_sma:
             sma = price_series.rolling(50).mean()
             sma_data = [
-                {"time": idx.isoformat(), "value": val}
+                {"time": int(idx.timestamp()), "value": float(val)}
                 for idx, val in sma.items()
             ]
             series.append({
@@ -921,7 +921,7 @@ def draw_dashboard(
         if show_ema:
             ema = price_series.ewm(span=21, adjust=False).mean()
             ema_data = [
-                {"time": idx.isoformat(), "value": val}
+                {"time": int(idx.timestamp()), "value": float(val)}
                 for idx, val in ema.items()
             ]
             series.append({
@@ -938,7 +938,7 @@ def draw_dashboard(
             )
             pnl_cum = pnl_cum.reindex(price_series.index, method="ffill").fillna(0)
             pnl_data = [
-                {"time": idx.isoformat(), "value": val}
+                {"time": int(idx.timestamp()), "value": float(val)}
                 for idx, val in pnl_cum.items()
             ]
             series.append({
@@ -949,7 +949,7 @@ def draw_dashboard(
 
         if has_volume:
             volume_data = [
-                {"time": idx.isoformat(), "value": row["volume"]}
+                {"time": int(idx.timestamp()), "value": float(row["volume"])}
                 for idx, row in price_df.iterrows()
             ]
             series.append({
