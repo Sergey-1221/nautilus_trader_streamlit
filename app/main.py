@@ -184,6 +184,30 @@ def style_trades(df: pd.DataFrame) -> pd.DataFrame | pd.Styler:
     return df
 
 
+def rebuild_equity_curve(
+    price_index: pd.DatetimeIndex,
+    trades_df: pd.DataFrame,
+    start_balance: float = 10_000,
+) -> pd.Series:
+    """Construct a basic equity curve from trade profits."""
+    price_index = pd.to_datetime(price_index)
+    if getattr(price_index, "tz", None) is not None:
+        price_index = price_index.tz_convert(None)
+
+    if trades_df.empty:
+        return pd.Series(start_balance, index=price_index)
+
+    pnl = trades_df.sort_values("exit_time").set_index("exit_time")["profit"].cumsum()
+    if getattr(pnl.index, "tz", None) is not None:
+        pnl.index = pnl.index.tz_convert(None)
+    pnl = pnl.reindex(price_index, method="ffill").fillna(0.0)
+    equity = start_balance + pnl
+    # Ensure all timestamps present
+    equity = equity.reindex(price_index, method="ffill")
+    equity.iloc[0] = start_balance
+    return equity
+
+
 # ╭──────────────────────── dashboard renderer ───────────────────────────────╮
 def draw_dashboard(
     result: dict, log_text: str, TPL: str, ACCENT: str, NEG: str
@@ -218,8 +242,25 @@ def draw_dashboard(
     for df in (price_df, equity_df, trades_df):
         if not df.empty and not isinstance(df.index, pd.DatetimeIndex):
             df.index = pd.to_datetime(df.index)
+        if not df.empty and getattr(df.index, "tz", None) is not None:
+            df.index = df.index.tz_convert(None)
+
+    for col in ("entry_time", "exit_time"):
+        if col in trades_df.columns:
+            trades_df[col] = pd.to_datetime(trades_df[col])
+            if getattr(trades_df[col].dt, "tz", None) is not None:
+                trades_df[col] = trades_df[col].dt.tz_convert(None)
 
     price_series = price_df["close"] if "close" in price_df else price_df.iloc[:, 0]
+
+    if equity_df.empty and not price_series.empty:
+        start_balance = (
+            result.get("initial_balances", {}).get("USDT")
+            or 10_000
+        )
+        equity_df = pd.DataFrame(
+            {"equity": rebuild_equity_curve(price_df.index, trades_df, start_balance)}
+        )
 
     # ── 2. fast KPI calc -----------------------------------------------------
     strategy_returns = (
@@ -251,14 +292,80 @@ def draw_dashboard(
             else np.nan
         )
 
-    def max_dd_days(series: pd.Series) -> float:
+    def longest_dd_days(series: pd.Series) -> float:
+        """Return the longest time in days between equity highs."""
         if series.empty:
             return np.nan
-        running_max = series.cummax()
-        dd = running_max - series
-        end = dd.idxmax()
-        start = series.loc[:end].idxmax()
-        return (end - start).days
+        peak_idx = series.index[0]
+        peak_val = series.iloc[0]
+        longest = 0
+        for idx in series.index[1:]:
+            val = series.loc[idx]
+            if val >= peak_val:
+                longest = max(longest, (idx - peak_idx).days)
+                peak_idx = idx
+                peak_val = val
+        longest = max(longest, (series.index[-1] - peak_idx).days)
+        return float(longest)
+
+    def dd_periods(series: pd.Series) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
+        """Return start and end timestamps for all drawdown phases."""
+        if series.empty:
+            return []
+        peak = series.iloc[0]
+        start = None
+        periods: list[tuple[pd.Timestamp, pd.Timestamp]] = []
+        for ts, val in series.items():
+            if val < peak:
+                if start is None:
+                    start = ts
+            else:
+                if start is not None:
+                    periods.append((start, ts))
+                    start = None
+                peak = val
+        if start is not None:
+            periods.append((start, series.index[-1]))
+        return periods
+
+    def avg_dd_days(series: pd.Series) -> float:
+        """Average drawdown duration in days."""
+        durs = [(e - s).days for s, e in dd_periods(series)]
+        return float(np.mean(durs)) if durs else np.nan
+
+    def total_dd_days(series: pd.Series) -> float:
+        """Total time spent in drawdowns in days."""
+        durs = [(e - s).days for s, e in dd_periods(series)]
+        return float(np.sum(durs)) if durs else np.nan
+
+    def max_dd_abs(series: pd.Series) -> float:
+        """Return the maximum drawdown in currency units."""
+        if series.empty:
+            return np.nan
+        return float((series.cummax() - series).max())
+
+    def longest_dd_span(series: pd.Series) -> tuple[pd.Timestamp, pd.Timestamp]:
+        """Return start and end timestamps of the longest drawdown."""
+        if series.empty:
+            return pd.NaT, pd.NaT
+        peak_idx = series.index[0]
+        peak_val = series.iloc[0]
+        longest = pd.Timedelta(0)
+        start = peak_idx
+        end = peak_idx
+        for idx in series.index[1:]:
+            val = series.loc[idx]
+            if val >= peak_val:
+                if idx - peak_idx > longest:
+                    longest = idx - peak_idx
+                    start = peak_idx
+                    end = idx
+                peak_idx = idx
+                peak_val = val
+        if series.index[-1] - peak_idx > longest:
+            start = peak_idx
+            end = series.index[-1]
+        return start, end
 
     comm_total = sum(result.get("commissions", {}).values())
 
@@ -299,8 +406,23 @@ def draw_dashboard(
         if not np.isnan(max_dd_pct) and not np.isnan(total_return)
         else np.nan
     )
-    max_dd_len = (
-        max_dd_days(equity_df["equity"]) if not equity_df.empty else np.nan
+    if not equity_df.empty:
+        bh_final = (
+            price_series.reindex(equity_df.index, method="ffill").iloc[-1]
+            / price_series.iloc[0]
+            * equity_df["equity"].iloc[0]
+        )
+        bh_edge = (equity_df["equity"].iloc[-1] / bh_final - 1) * 100
+    else:
+        bh_edge = np.nan
+    longest_dd_len = (
+        longest_dd_days(equity_df["equity"]) if not equity_df.empty else np.nan
+    )
+    avg_dd_len = avg_dd_days(equity_df["equity"]) if not equity_df.empty else np.nan
+    total_dd_len = total_dd_days(equity_df["equity"]) if not equity_df.empty else np.nan
+    max_dd_dollars = max_dd_abs(equity_df["equity"]) if not equity_df.empty else np.nan
+    dd_start, dd_end = (
+        longest_dd_span(equity_df["equity"]) if not equity_df.empty else (pd.NaT, pd.NaT)
     )
 
     kpi = {
@@ -315,7 +437,10 @@ def draw_dashboard(
         "Sharpe": sharpe(strategy_returns),
         "Sortino": sortino(strategy_returns),
         "Max DD (%)": max_dd_pct,
-        "Max DD (days)": max_dd_len,
+        "Longest DD (days)": longest_dd_len,
+        "Avg DD (days)": avg_dd_len,
+        "Total DD (days)": total_dd_len,
+        "Max DD ($)": max_dd_dollars,
         "Profit Factor": result.get("metrics", {}).get("profit_factor", np.nan),
         "Volatility (252d)": (
             strategy_returns.std(ddof=0) * np.sqrt(252)
@@ -326,6 +451,7 @@ def draw_dashboard(
         "Profit/DD": pnl_dd_ratio,
         "Time in Market": tim,
         "Avg Trade (h)": avg_trade_h,
+        "Edge vs B&H (%)": bh_edge,
     }
     KPI_ICONS = {
         "PnL ($)": "💰",
@@ -334,13 +460,17 @@ def draw_dashboard(
         "Sharpe": "⚖️",
         "Sortino": "📐",
         "Max DD (%)": "📉",
-        "Max DD (days)": "🕳️",
+        "Longest DD (days)": "🕳️",
+        "Avg DD (days)": "⏱️",
+        "Total DD (days)": "🕒",
+        "Max DD ($)": "💸",
         "Profit Factor": "🚀",
         "Volatility (252d)": "📊",
         "Annual Return": "📅",
         "Profit/DD": "⚡",
         "Time in Market": "⏱️",
         "Avg Trade (h)": "⏳",
+        "Edge vs B&H (%)": "🏁",
     }
 
     KPI_TOOLTIPS = {
@@ -350,12 +480,16 @@ def draw_dashboard(
         "Profit/DD": "Profit to drawdown ratio",
         "Time in Market": "Percentage of time with open positions",
         "Max DD (%)": "Maximum equity drawdown in percent",
-        "Max DD (days)": "Duration of the largest drawdown",
+        "Longest DD (days)": "Longest drawdown period in days",
+        "Avg DD (days)": "Average duration of drawdowns in days",
+        "Total DD (days)": "Total time spent in drawdowns",
+        "Max DD ($)": "Largest peak-to-trough drop in account balance",
         "Sharpe": "Risk-adjusted return ratio",
         "Sortino": "Downside risk-adjusted return",
         "Profit Factor": "Gross profit divided by gross loss",
         "Win Rate": "Share of profitable trades",
         "Avg Trade (h)": "Average trade duration in hours",
+        "Edge vs B&H (%)": "Strategy performance relative to buy-and-hold",
     }
 
     KPI_PCT_LABELS = {
@@ -364,14 +498,20 @@ def draw_dashboard(
         "Max DD (%)",
         "Annual Return",
         "Time in Market",
+        "Edge vs B&H (%)",
     }
 
-    _fmt_pct = lambda v: (
-        "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{v:+.2%}"
-    )
-    _fmt_num = lambda v, p=2: (
-        "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{v:,.{p}f}"
-    )
+    def _fmt_pct(v: float | None) -> str:
+        """Return value formatted as a percentage or an em dash."""
+        if v is None or (isinstance(v, float) and np.isnan(v)):
+            return "—"
+        return f"{v:+.2%}"
+
+    def _fmt_num(v: float | None, p: int = 2) -> str:
+        """Return number with thousands separator or an em dash."""
+        if v is None or (isinstance(v, float) and np.isnan(v)):
+            return "—"
+        return f"{v:,.{p}f}"
 
     extra_stats = parse_extra_stats(log_text)
 
@@ -439,6 +579,7 @@ def draw_dashboard(
                 "PnL (%)",
                 "Annual Return",
                 "Profit/DD",
+                "Edge vs B&H (%)",
             ]
             trade_order = [
                 "Win Rate",
@@ -449,7 +590,10 @@ def draw_dashboard(
                 "Sharpe",
                 "Sortino",
                 "Max DD (%)",
-                "Max DD (days)",
+                "Longest DD (days)",
+                "Avg DD (days)",
+                "Total DD (days)",
+                "Max DD ($)",
                 "Volatility (252d)",
             ]
 
@@ -460,7 +604,7 @@ def draw_dashboard(
                     icon = KPI_ICONS.get(label, "")
                     tip = KPI_TOOLTIPS.get(label, "")
                     is_pct = label in KPI_PCT_LABELS
-                    precision = 0 if label == "Max DD (days)" else 2
+                    precision = 0 if label in {"Longest DD (days)", "Avg DD (days)", "Total DD (days)"} else 2
                     text = _fmt_pct(value) if is_pct else _fmt_num(value, precision)
                     col.metric(f"{icon} {label}", text, help=tip)
 
@@ -568,7 +712,6 @@ def draw_dashboard(
     # ① Price & Trades --------------------------------------------------------
     st.subheader("📉 Price & Trades")
     fig_pt = go.Figure()
-    fig_pt = go.Figure()
     fig_pt.add_trace(
         go.Scatter(x=price_series.index, y=price_series, mode="lines", name="Price")
     )
@@ -618,7 +761,7 @@ def draw_dashboard(
 
     # ② Equity | Drawdown | Fees ---------------------------------------------
     st.subheader("📈 Equity & Drawdown")
-    col_eq, col_dd = st.columns(2)
+
 
     if not equity_df.empty:
         first_equity = (
@@ -627,33 +770,74 @@ def draw_dashboard(
             else 0.0
         )
         start_balance_series = pd.Series(first_equity, index=equity_df.index)
+        buy_hold = (
+            price_series.reindex(equity_df.index, method="ffill")
+            / price_series.iloc[0]
+            * first_equity
+        )
         eq_plot_df = pd.DataFrame(
-            {"Equity": equity_df["equity"], "Start Balance": start_balance_series}
+            {
+                "Equity": equity_df["equity"],
+                "Buy & Hold": buy_hold,
+                "Start Balance": start_balance_series,
+            }
         ).dropna()
 
-        col_eq.plotly_chart(
-            px.line(
-                eq_plot_df,
-                x=eq_plot_df.index,
-                y=["Equity", "Start Balance"],
-                template=TPL,
-                labels={"value": "Series value", "variable": "Series"},
+        start, end = st.slider(
+            "Select period",
+            min_value=eq_plot_df.index[0].to_pydatetime(),
+            max_value=eq_plot_df.index[-1].to_pydatetime(),
+            value=(
+                eq_plot_df.index[0].to_pydatetime(),
+                eq_plot_df.index[-1].to_pydatetime(),
             ),
-            use_container_width=True,
+            format="YYYY-MM-DD",
         )
+        view = eq_plot_df.loc[start:end]
+        log_y = st.checkbox("Log scale", value=False)
+
+        fig_eq = px.line(
+            view,
+            x=view.index,
+            y=["Equity", "Buy & Hold", "Start Balance"],
+            template=TPL,
+            labels={"value": "Series value", "variable": "Series"},
+        )
+        if log_y:
+            fig_eq.update_yaxes(type="log")
+        if pd.notna(dd_start) and pd.notna(dd_end):
+            fig_eq.add_vrect(
+                x0=dd_start,
+                x1=dd_end,
+                fillcolor="grey",
+                opacity=0.25,
+                layer="below",
+                annotation_text="Longest DD",
+            )
+            fig_eq.add_vline(x=dd_start, line_dash="dash", line_color=NEG)
+            fig_eq.add_vline(x=dd_end, line_dash="dash", line_color=ACCENT)
+        st.plotly_chart(fig_eq, use_container_width=True)
     else:
-        col_eq.info("Equity data unavailable.")
+        st.info("Equity data unavailable.")
 
     if not equity_df.empty:
-        dd = (equity_df["equity"].cummax() - equity_df["equity"]) / equity_df[
+        dd_full = (equity_df["equity"].cummax() - equity_df["equity"]) / equity_df[
             "equity"
         ].cummax()
-        col_dd.plotly_chart(
-            px.area(x=dd.index, y=dd.values, template=TPL),
-            use_container_width=True,
-        )
+        dd = dd_full.loc[start:end]
+        fig_dd = px.area(x=dd.index, y=dd.values, template=TPL)
+        if pd.notna(dd_start) and pd.notna(dd_end):
+            fig_dd.add_vrect(
+                x0=dd_start,
+                x1=dd_end,
+                fillcolor="grey",
+                opacity=0.25,
+                layer="below",
+                annotation_text="Longest DD",
+            )
+        st.plotly_chart(fig_dd, use_container_width=True)
     else:
-        col_dd.warning("Equity data unavailable.")
+        st.warning("Equity data unavailable.")
 
     if "commission" in trades_df.columns:
         trades_df["comm_cum"] = trades_df["commission"].cumsum()
