@@ -836,6 +836,14 @@ def draw_dashboard(
             help="Streamlit-lightweight-charts for large datasets",
         )
 
+    chart_opts = st.columns(3)
+    price_style = chart_opts[0].selectbox(
+        "Price style",
+        ["Line", "Candlesticks"],
+    )
+    show_sma = chart_opts[1].checkbox("Show 50 SMA", value=False)
+    show_ema = chart_opts[2].checkbox("Show 21 EMA", value=False)
+
     has_volume = "volume" in price_df.columns
 
     fig_pt = make_subplots(
@@ -847,11 +855,40 @@ def draw_dashboard(
         row_heights=[0.7, 0.3] if has_volume else [1.0],
     )
 
-    fig_pt.add_trace(
-        go.Scatter(x=price_series.index, y=price_series, mode="lines", name="Price"),
-        row=1,
-        col=1,
-    )
+    if price_style == "Candlesticks" and {"open", "high", "low", "close"}.issubset(price_df.columns):
+        fig_pt.add_trace(
+            go.Candlestick(
+                x=price_df.index,
+                open=price_df["open"],
+                high=price_df["high"],
+                low=price_df["low"],
+                close=price_df["close"],
+                name="Price",
+            ),
+            row=1,
+            col=1,
+        )
+    else:
+        fig_pt.add_trace(
+            go.Scatter(x=price_series.index, y=price_series, mode="lines", name="Price"),
+            row=1,
+            col=1,
+        )
+
+    if show_sma:
+        sma = price_series.rolling(50).mean()
+        fig_pt.add_trace(
+            go.Scatter(x=sma.index, y=sma, mode="lines", name="50 SMA", line=dict(color="#6366f1")),
+            row=1,
+            col=1,
+        )
+    if show_ema:
+        ema = price_series.ewm(span=21, adjust=False).mean()
+        fig_pt.add_trace(
+            go.Scatter(x=ema.index, y=ema, mode="lines", name="21 EMA", line=dict(color="#fbbf24")),
+            row=1,
+            col=1,
+        )
 
     if not trades_df.empty:
         buys = trades_df[trades_df.get("entry_side", "").str.upper() == "LONG"]
