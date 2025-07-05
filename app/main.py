@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 
 # ────────────────────────────── local code ───────────────────────────────────
@@ -388,183 +389,6 @@ def draw_dashboard(
         """Number of drawdown periods."""
         return len(dd_periods(series))
 
-    comm_total = sum(result.get("commissions", {}).values())
-
-    # Additional performance metrics
-    period_seconds = (
-        run_meta["Backtest end"] - run_meta["Backtest start"]
-    ).total_seconds()
-    total_return = (
-        (equity_df["equity"].iloc[-1] - equity_df["equity"].iloc[0])
-        / equity_df["equity"].iloc[0]
-        if not equity_df.empty
-        else np.nan
-    )
-    annual_return = (
-        (1 + total_return) ** (365 * 24 * 3600 / period_seconds) - 1
-        if period_seconds > 0 and not np.isnan(total_return)
-        else np.nan
-    )
-    tim = (
-        (
-            trades_df["exit_time"] - trades_df["entry_time"]
-        ).dt.total_seconds().sum()
-        / period_seconds * 100
-        if period_seconds > 0 and not trades_df.empty
-        else np.nan
-    )
-    avg_trade_h = (
-        (
-            trades_df["exit_time"] - trades_df["entry_time"]
-        ).dt.total_seconds().mean()
-        / 3600
-        if not trades_df.empty
-        else np.nan
-    )
-    max_dd_pct = max_dd(equity_df["equity"]) * 100 if not equity_df.empty else np.nan
-    pnl_dd_ratio = (
-        (total_return * 100) / abs(max_dd_pct)
-        if not np.isnan(max_dd_pct) and not np.isnan(total_return)
-        else np.nan
-    )
-    if not equity_df.empty:
-        bh_final = (
-            price_series.reindex(equity_df.index, method="ffill").iloc[-1]
-            / price_series.iloc[0]
-            * equity_df["equity"].iloc[0]
-        )
-        bh_edge = (equity_df["equity"].iloc[-1] / bh_final - 1) * 100
-    else:
-        bh_edge = np.nan
-    longest_dd_len = (
-        longest_dd_days(equity_df["equity"]) if not equity_df.empty else np.nan
-    )
-    avg_dd_len = avg_dd_days(equity_df["equity"]) if not equity_df.empty else np.nan
-    total_dd_len = total_dd_days(equity_df["equity"]) if not equity_df.empty else np.nan
-    max_dd_dollars = max_dd_abs(equity_df["equity"]) if not equity_df.empty else np.nan
-    dd_start, dd_end = (
-        longest_dd_span(equity_df["equity"]) if not equity_df.empty else (pd.NaT, pd.NaT)
-    )
-    current_dd_len = current_dd_days(equity_df["equity"]) if not equity_df.empty else np.nan
-    avg_dd_pct_val = avg_dd_pct(equity_df["equity"]) if not equity_df.empty else np.nan
-    dd_total = dd_count(equity_df["equity"]) if not equity_df.empty else 0
-
-    var5 = np.percentile(strategy_returns, 5) if not strategy_returns.empty else np.nan
-    cvar5 = (
-        strategy_returns[strategy_returns <= var5].mean()
-        if not strategy_returns.empty
-        else np.nan
-    )
-    calmar = (
-        annual_return / (abs(max_dd_pct) / 100)
-        if max_dd_pct not in (0, np.nan) and not np.isnan(annual_return)
-        else np.nan
-    )
-    romad = (
-        total_return / (abs(max_dd_pct) / 100)
-        if max_dd_pct not in (0, np.nan) and not np.isnan(total_return)
-        else np.nan
-    )
-
-    kpi = {
-        "PnL ($)": result.get("metrics", {}).get("total_profit", np.nan),
-        "PnL (%)": (
-            (equity_df["equity"].iloc[-1] - equity_df["equity"].iloc[0])
-            / equity_df["equity"].iloc[0]
-            if not equity_df.empty
-            else np.nan
-        ),
-        "Win Rate": result.get("metrics", {}).get("win_rate", np.nan),
-        "Sharpe": sharpe(strategy_returns),
-        "Sortino": sortino(strategy_returns),
-        "Max DD (%)": max_dd_pct,
-        "Longest DD (days)": longest_dd_len,
-        "Avg DD (days)": avg_dd_len,
-        "Total DD (days)": total_dd_len,
-        "Max DD ($)": max_dd_dollars,
-        "Profit Factor": result.get("metrics", {}).get("profit_factor", np.nan),
-        "Volatility (252d)": (
-            strategy_returns.std(ddof=0) * np.sqrt(252)
-            if not strategy_returns.empty
-            else np.nan
-        ),
-        "Annual Return": annual_return,
-        "Profit/DD": pnl_dd_ratio,
-        "Time in Market": tim,
-        "Avg Trade (h)": avg_trade_h,
-        "Edge vs B&H (%)": bh_edge,
-        "Current DD (days)": current_dd_len,
-        "Avg DD (%)": avg_dd_pct_val,
-        "Drawdowns": dd_total,
-        "VaR 5%": var5,
-        "CVaR 5%": cvar5,
-        "Calmar": calmar,
-        "RoMaD": romad,
-    }
-    KPI_ICONS = {
-        "PnL ($)": "💰",
-        "PnL (%)": "📈",
-        "Win Rate": "🏆",
-        "Sharpe": "⚖️",
-        "Sortino": "📐",
-        "Max DD (%)": "📉",
-        "Longest DD (days)": "🕳️",
-        "Avg DD (days)": "⏱️",
-        "Total DD (days)": "🕒",
-        "Max DD ($)": "💸",
-        "Profit Factor": "🚀",
-        "Volatility (252d)": "📊",
-        "Annual Return": "📅",
-        "Profit/DD": "⚡",
-        "Time in Market": "⏱️",
-        "Avg Trade (h)": "⏳",
-        "Edge vs B&H (%)": "🏁",
-        "Current DD (days)": "📉",
-        "Avg DD (%)": "📉",
-        "Drawdowns": "🔻",
-        "VaR 5%": "🚩",
-        "CVaR 5%": "🚩",
-        "Calmar": "🏊",
-        "RoMaD": "📏",
-    }
-
-    KPI_TOOLTIPS = {
-        "PnL ($)": "Net profit in base currency",
-        "PnL (%)": "Total return over the test period",
-        "Annual Return": "Compound annual growth rate",
-        "Profit/DD": "Profit to drawdown ratio",
-        "Time in Market": "Percentage of time with open positions",
-        "Max DD (%)": "Maximum equity drawdown in percent",
-        "Longest DD (days)": "Longest drawdown period in days",
-        "Avg DD (days)": "Average duration of drawdowns in days",
-        "Total DD (days)": "Total time spent in drawdowns",
-        "Max DD ($)": "Largest peak-to-trough drop in account balance",
-        "Sharpe": "Risk-adjusted return ratio",
-        "Sortino": "Downside risk-adjusted return",
-        "Profit Factor": "Gross profit divided by gross loss",
-        "Win Rate": "Share of profitable trades",
-        "Avg Trade (h)": "Average trade duration in hours",
-        "Edge vs B&H (%)": "Strategy performance relative to buy-and-hold",
-        "Current DD (days)": "Days since last equity peak",
-        "Avg DD (%)": "Average drawdown depth",
-        "Drawdowns": "Number of drawdown periods",
-        "VaR 5%": "Value at Risk at 5%",
-        "CVaR 5%": "Conditional VaR at 5%",
-        "Calmar": "CAGR divided by max drawdown",
-        "RoMaD": "Return over maximum drawdown",
-    }
-
-    KPI_PCT_LABELS = {
-        "PnL (%)",
-        "Win Rate",
-        "Max DD (%)",
-        "Annual Return",
-        "Time in Market",
-        "Edge vs B&H (%)",
-        "Avg DD (%)",
-        "VaR 5%",
-        "CVaR 5%",
-    }
 
     def _fmt_pct(v: float | None) -> str:
         """Return value formatted as a percentage or an em dash."""
@@ -610,12 +434,210 @@ def draw_dashboard(
     with st.container(border=True):
         st.subheader("💹 Account & Performance")
 
+        start_default = price_df.index[0]
+        end_default = price_df.index[-1]
+        period_start, period_end = st.slider(
+            "Analysis period",
+            min_value=start_default.to_pydatetime(),
+            max_value=end_default.to_pydatetime(),
+            value=(start_default.to_pydatetime(), end_default.to_pydatetime()),
+            format="YYYY-MM-DD",
+        )
 
-        # ------------------------------------------------------------------
-        # We analyse the entire back-test by default.
-        # If strategy_returns is empty, returns_view will also be empty.
-        # ------------------------------------------------------------------
-        returns_view = strategy_returns
+        price_df = price_df.loc[period_start:period_end]
+        equity_df = equity_df.loc[period_start:period_end]
+        trades_df = trades_df[
+            (trades_df["entry_time"] >= period_start)
+            & (trades_df["entry_time"] <= period_end)
+        ]
+
+        price_series = (
+            price_df["close"] if "close" in price_df else price_df.iloc[:, 0]
+        )
+        returns_view = (
+            equity_df["equity"].pct_change().dropna()
+            if not equity_df.empty
+            else pd.Series(dtype=float)
+        )
+        strategy_returns = returns_view
+        benchmark_returns = price_series.pct_change().dropna()
+
+        comm_total = sum(result.get("commissions", {}).values())
+
+        period_seconds = (
+            price_df.index[-1] - price_df.index[0]
+        ).total_seconds()
+        total_return = (
+            (equity_df["equity"].iloc[-1] - equity_df["equity"].iloc[0])
+            / equity_df["equity"].iloc[0]
+            if not equity_df.empty
+            else np.nan
+        )
+        annual_return = (
+            (1 + total_return) ** (365 * 24 * 3600 / period_seconds) - 1
+            if period_seconds > 0 and not np.isnan(total_return)
+            else np.nan
+        )
+        tim = (
+            (
+                trades_df["exit_time"] - trades_df["entry_time"]
+            ).dt.total_seconds().sum()
+            / period_seconds * 100
+            if period_seconds > 0 and not trades_df.empty
+            else np.nan
+        )
+        avg_trade_h = (
+            (
+                trades_df["exit_time"] - trades_df["entry_time"]
+            ).dt.total_seconds().mean()
+            / 3600
+            if not trades_df.empty
+            else np.nan
+        )
+        max_dd_pct = max_dd(equity_df["equity"]) * 100 if not equity_df.empty else np.nan
+        pnl_dd_ratio = (
+            (total_return * 100) / abs(max_dd_pct)
+            if not np.isnan(max_dd_pct) and not np.isnan(total_return)
+            else np.nan
+        )
+        if not equity_df.empty:
+            bh_final = (
+                price_series.reindex(equity_df.index, method="ffill").iloc[-1]
+                / price_series.iloc[0]
+                * equity_df["equity"].iloc[0]
+            )
+            bh_edge = (equity_df["equity"].iloc[-1] / bh_final - 1) * 100
+        else:
+            bh_edge = np.nan
+        longest_dd_len = (
+            longest_dd_days(equity_df["equity"]) if not equity_df.empty else np.nan
+        )
+        avg_dd_len = avg_dd_days(equity_df["equity"]) if not equity_df.empty else np.nan
+        total_dd_len = total_dd_days(equity_df["equity"]) if not equity_df.empty else np.nan
+        max_dd_dollars = max_dd_abs(equity_df["equity"]) if not equity_df.empty else np.nan
+        dd_start, dd_end = (
+            longest_dd_span(equity_df["equity"]) if not equity_df.empty else (pd.NaT, pd.NaT)
+        )
+        current_dd_len = current_dd_days(equity_df["equity"]) if not equity_df.empty else np.nan
+        avg_dd_pct_val = avg_dd_pct(equity_df["equity"]) if not equity_df.empty else np.nan
+        dd_total = dd_count(equity_df["equity"]) if not equity_df.empty else 0
+
+        var5 = np.percentile(returns_view, 5) if not returns_view.empty else np.nan
+        cvar5 = (
+            returns_view[returns_view <= var5].mean()
+            if not returns_view.empty
+            else np.nan
+        )
+        calmar = (
+            annual_return / (abs(max_dd_pct) / 100)
+            if max_dd_pct not in (0, np.nan) and not np.isnan(annual_return)
+            else np.nan
+        )
+        romad = (
+            total_return / (abs(max_dd_pct) / 100)
+            if max_dd_pct not in (0, np.nan) and not np.isnan(total_return)
+            else np.nan
+        )
+
+        kpi = {
+            "PnL ($)": result.get("metrics", {}).get("total_profit", np.nan),
+            "PnL (%)": (
+                (equity_df["equity"].iloc[-1] - equity_df["equity"].iloc[0])
+                / equity_df["equity"].iloc[0]
+                if not equity_df.empty
+                else np.nan
+            ),
+            "Win Rate": result.get("metrics", {}).get("win_rate", np.nan),
+            "Sharpe": sharpe(returns_view),
+            "Sortino": sortino(returns_view),
+            "Max DD (%)": max_dd_pct,
+            "Longest DD (days)": longest_dd_len,
+            "Avg DD (days)": avg_dd_len,
+            "Total DD (days)": total_dd_len,
+            "Max DD ($)": max_dd_dollars,
+            "Profit Factor": result.get("metrics", {}).get("profit_factor", np.nan),
+            "Volatility (252d)": (
+                returns_view.std(ddof=0) * np.sqrt(252)
+                if not returns_view.empty
+                else np.nan
+            ),
+            "Annual Return": annual_return,
+            "Profit/DD": pnl_dd_ratio,
+            "Time in Market": tim,
+            "Avg Trade (h)": avg_trade_h,
+            "Edge vs B&H (%)": bh_edge,
+            "Current DD (days)": current_dd_len,
+            "Avg DD (%)": avg_dd_pct_val,
+            "Drawdowns": dd_total,
+            "VaR 5%": var5,
+            "CVaR 5%": cvar5,
+            "Calmar": calmar,
+            "RoMaD": romad,
+        }
+        KPI_ICONS = {
+            "PnL ($)": "💰",
+            "PnL (%)": "📈",
+            "Win Rate": "🏆",
+            "Sharpe": "⚖️",
+            "Sortino": "📐",
+            "Max DD (%)": "📉",
+            "Longest DD (days)": "🕳️",
+            "Avg DD (days)": "⏱️",
+            "Total DD (days)": "🕒",
+            "Max DD ($)": "💸",
+            "Profit Factor": "🚀",
+            "Volatility (252d)": "📊",
+            "Annual Return": "📅",
+            "Profit/DD": "⚡",
+            "Time in Market": "⏱️",
+            "Avg Trade (h)": "⏳",
+            "Edge vs B&H (%)": "🏁",
+            "Current DD (days)": "📉",
+            "Avg DD (%)": "📉",
+            "Drawdowns": "🔻",
+            "VaR 5%": "🚩",
+            "CVaR 5%": "🚩",
+            "Calmar": "🏊",
+            "RoMaD": "📏",
+        }
+
+        KPI_TOOLTIPS = {
+            "PnL ($)": "Net profit in base currency",
+            "PnL (%)": "Total return over the test period",
+            "Annual Return": "Compound annual growth rate",
+            "Profit/DD": "Profit to drawdown ratio",
+            "Time in Market": "Percentage of time with open positions",
+            "Max DD (%)": "Maximum equity drawdown in percent",
+            "Longest DD (days)": "Longest drawdown period in days",
+            "Avg DD (days)": "Average duration of drawdowns in days",
+            "Total DD (days)": "Total time spent in drawdowns",
+            "Max DD ($)": "Largest peak-to-trough drop in account balance",
+            "Sharpe": "Risk-adjusted return ratio",
+            "Sortino": "Downside risk-adjusted return",
+            "Profit Factor": "Gross profit divided by gross loss",
+            "Win Rate": "Share of profitable trades",
+            "Avg Trade (h)": "Average trade duration in hours",
+            "Edge vs B&H (%)": "Strategy performance relative to buy-and-hold",
+            "Current DD (days)": "Days since last equity peak",
+            "Avg DD (%)": "Average drawdown depth",
+            "Drawdowns": "Number of drawdown periods",
+            "VaR 5%": "Value at Risk at 5%",
+            "CVaR 5%": "Conditional VaR at 5%",
+            "Calmar": "CAGR divided by max drawdown",
+            "RoMaD": "Return over maximum drawdown",
+        }
+
+        KPI_PCT_LABELS = {
+            "PnL (%)",
+            "Win Rate",
+            "Max DD (%)",
+            "Annual Return",
+            "Time in Market",
+            "Edge vs B&H (%)",
+            "Avg DD (%)",
+            "VaR 5%",
+            "CVaR 5%",
+        }
 
         # ── Tabs -----------------------------------------------------------
         perf_tabs = st.tabs(
@@ -669,7 +691,14 @@ def draw_dashboard(
                 "CVaR 5%",
             ]
 
-            for order in (perf_order, trade_order, risk_order):
+            groups = [
+                ("Return", perf_order),
+                ("Trade quality", trade_order),
+                ("Risk", risk_order),
+            ]
+
+            for gtitle, order in groups:
+                st.markdown(f"**{gtitle} metrics**")
                 cols = st.columns(len(order))
                 for label, col in zip(order, cols):
                     value = kpi.get(label)
@@ -679,6 +708,12 @@ def draw_dashboard(
                     precision = 0 if label in {"Longest DD (days)", "Avg DD (days)", "Total DD (days)"} else 2
                     text = _fmt_pct(value) if is_pct else _fmt_num(value, precision)
                     col.metric(f"{icon} {label}", text, help=tip)
+
+                if gtitle == "Return" and "Edge vs B&H (%)" in order:
+                    edge = kpi.get("Edge vs B&H (%)")
+                    if edge is not None and not (isinstance(edge, float) and np.isnan(edge)):
+                        ratio = min(max((edge + 100) / 200, 0), 1)
+                        st.progress(ratio)
 
         # === Tab 1: Balances & Fees ==============================================
         with perf_tabs[1]:
@@ -783,16 +818,34 @@ def draw_dashboard(
 
     # ① Price & Trades --------------------------------------------------------
     st.subheader("📉 Price & Trades")
-    fig_pt = go.Figure()
+
+    controls = st.columns(3)
+    show_long = controls[0].checkbox("Show longs", value=True)
+    show_short = controls[1].checkbox("Show shorts", value=True)
+    show_exit = controls[2].checkbox("Show exits", value=True)
+
+    has_volume = "volume" in price_df.columns
+
+    fig_pt = make_subplots(
+        rows=2 if has_volume else 1,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.05,
+        specs=[[{"secondary_y": True}]] + ([[{}]] if has_volume else []),
+        row_heights=[0.7, 0.3] if has_volume else [1.0],
+    )
+
     fig_pt.add_trace(
-        go.Scatter(x=price_series.index, y=price_series, mode="lines", name="Price")
+        go.Scatter(x=price_series.index, y=price_series, mode="lines", name="Price"),
+        row=1,
+        col=1,
     )
 
     if not trades_df.empty:
         buys = trades_df[trades_df.get("entry_side", "").str.upper() == "LONG"]
         sells = trades_df[trades_df.get("entry_side", "").str.upper() == "SELL"]
 
-        if not buys.empty:
+        if show_long and not buys.empty:
             fig_pt.add_trace(
                 go.Scatter(
                     x=buys["entry_time"],
@@ -800,10 +853,13 @@ def draw_dashboard(
                     mode="markers",
                     marker_symbol="triangle-up",
                     marker_color=ACCENT,
-                    name="Buy (entry)",
-                )
+                    name="Buy",
+                    hovertemplate="%{x|%Y-%m-%d %H:%M}<br>Buy: %{y:.2f}",
+                ),
+                row=1,
+                col=1,
             )
-        if not sells.empty:
+        if show_short and not sells.empty:
             fig_pt.add_trace(
                 go.Scatter(
                     x=sells["entry_time"],
@@ -811,23 +867,68 @@ def draw_dashboard(
                     mode="markers",
                     marker_symbol="triangle-down",
                     marker_color=NEG,
-                    name="Sell short (entry)",
-                )
+                    name="Sell short",
+                    hovertemplate="%{x|%Y-%m-%d %H:%M}<br>Sell: %{y:.2f}",
+                ),
+                row=1,
+                col=1,
             )
-        if {"exit_time", "exit_price"}.issubset(trades_df.columns):
+        if show_exit and {"exit_time", "exit_price"}.issubset(trades_df.columns):
             fig_pt.add_trace(
                 go.Scatter(
                     x=trades_df["exit_time"],
                     y=trades_df["exit_price"],
                     mode="markers",
-                    marker_symbol="triangle-down",
-                    marker_size=9,
+                    marker_symbol="circle",
+                    marker_size=8,
                     marker_color="#EF4444",
                     name="Exit",
-                )
+                    hovertemplate="%{x|%Y-%m-%d %H:%M}<br>Exit: %{y:.2f}",
+                ),
+                row=1,
+                col=1,
             )
 
-    fig_pt.update_layout(template=TPL, height=420, margin=dict(l=0, r=0, b=0, t=25))
+        if {"exit_time", "profit"}.issubset(trades_df.columns):
+            pnl_cum = (
+                trades_df.sort_values("exit_time")
+                .set_index("exit_time")["profit"]
+                .cumsum()
+            )
+            pnl_cum = pnl_cum.reindex(price_series.index, method="ffill").fillna(0)
+            fig_pt.add_trace(
+                go.Scatter(
+                    x=price_series.index,
+                    y=pnl_cum,
+                    mode="lines",
+                    line=dict(color="#6b7280", dash="dot"),
+                    name="PnL",
+                ),
+                secondary_y=True,
+                row=1,
+                col=1,
+            )
+
+    if has_volume:
+        fig_pt.add_trace(
+            go.Bar(
+                x=price_df.index,
+                y=price_df["volume"],
+                marker_color="#d1d5db",
+                name="Volume",
+            ),
+            row=2,
+            col=1,
+        )
+        fig_pt.update_yaxes(title_text="Volume", row=2, col=1)
+
+    fig_pt.update_layout(
+        template=TPL,
+        height=600 if has_volume else 420,
+        margin=dict(l=0, r=0, b=0, t=25),
+        showlegend=True,
+    )
+
     st.plotly_chart(fig_pt, use_container_width=True)
     st.markdown("---")
 
