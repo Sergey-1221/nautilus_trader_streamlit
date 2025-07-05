@@ -18,62 +18,20 @@ NautilusTrader is a rapidly evolving open-source platform for algorithmic tradin
 * ✅ **Great for presentations**: beautiful and clear visualizations for investors and team members.
 * ✅ **Time-saving**: quickly identify bugs and strategy issues.
 * ✅ **Improved visuals**: themed widgets, icons and styled data tables.
-* ✅ **Price chart enhancements**: trade markers, optional volume bars and cumulative PnL overlay rendered with `streamlit-lightweight-charts-v5`.
+* ✅ **Price chart enhancements**: trade markers, optional volume bars and cumulative PnL overlay rendered with `streamlit-lightweight-charts`.
 * ✅ **Detailed trade tooltips**: hover markers to see entry, exit and PnL info.
 * ✅ **Chart options**: choose line or candlesticks and overlay SMA/EMA lines.
-* ✅ **Fast charting**: uses `streamlit-lightweight-charts-v5` to render thousands of bars smoothly.
+* ✅ **Fast charting**: uses `streamlit-lightweight-charts` to render thousands of bars smoothly.
 * ✅ **Structured metrics**: grouped performance KPIs with a progress bar showing edge over buy‑and‑hold.
 
 ---
 
 ## 🛠️ Quick Start
-Install dependencies and run the app:
+Run the app:
 
 ```bash
-pip install -r requirements.txt
 streamlit run app/main.py
 ```
-
-The requirements file installs `streamlit-lightweight-charts-v5` so the price
-charts render correctly on Python 3.12.
-
-## 📈 Lightweight Charts Example
-
-This snippet renders a candlestick chart using the component:
-
-```python
-import streamlit as st
-from lightweight_charts_v5 import lightweight_charts_v5_component as lwc
-import yfinance as yf
-
-df = yf.download("AAPL", period="6mo", interval="1d")
-ohlc = [
-    {
-        "time": str(idx.date()),
-        "open": float(r.Open),
-        "high": float(r.High),
-        "low": float(r.Low),
-        "close": float(r.Close),
-    }
-    for idx, r in df.iterrows()
-]
-
-lwc(
-    name="AAPL chart",
-    charts=[{
-        "series": [{
-            "type": "Candlestick",
-            "data": ohlc,
-            "options": {"upColor": "#26a69a", "downColor": "#ef5350"},
-        }],
-        "height": 450,
-    }],
-    height=450,
-)
-```
-
-Make sure each series dictionary includes the correct `type` key to avoid
-"Unsupported series type" errors.
 
 ## 📈 Equity & Drawdown
 
