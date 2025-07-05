@@ -41,7 +41,7 @@ st.set_page_config(page_title="NautilusTrader Dashboard", layout="wide")
 # --- CSS tweaks --------------------------------------------------------------
 st.markdown(
     """
-    <style>
+    <style id="tv-attr-logo">
     /* grey background for the first expander header */
     div[data-testid="stExpander"] > details > summary {
         background-color:#f3f4f6 !important;  /* tailwind gray‑100 */
