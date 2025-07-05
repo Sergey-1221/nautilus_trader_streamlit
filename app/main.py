@@ -656,7 +656,6 @@ def draw_dashboard(
     # ① Price & Trades --------------------------------------------------------
     st.subheader("📉 Price & Trades")
     fig_pt = go.Figure()
-    fig_pt = go.Figure()
     fig_pt.add_trace(
         go.Scatter(x=price_series.index, y=price_series, mode="lines", name="Price")
     )
