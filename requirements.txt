@@ -9,3 +9,4 @@ numpy
 plotly
 nautilus_trader
 clickhouse-driver
+streamlit-lightweight-charts
