@@ -28,6 +28,17 @@ Run the app:
 streamlit run app/main.py
 ```
 
+## 📈 Equity & Drawdown
+
+The dashboard visualizes how the account balance evolves and how deep the drawdowns were.
+
+* **Equity curve** – portfolio value over time. A steadily rising line indicates consistent profit.
+* **Drawdown chart** – percentage fall from the latest equity peak. The maximum of this series is the *maximum drawdown*. The app also measures how many days it took to recover from the deepest slump – the *longest drawdown duration*.
+
+The two charts are shown one under the other, making it easy to relate profit growth and dips. The equity chart includes a *Buy & Hold* line for instant comparison with simply holding the asset.
+
+You can focus on any time range using the built‑in date slider and toggle logarithmic scaling. The dashboard also reports your edge over the benchmark as **Edge vs B&H (%)**.
+
 ---
 
 ## 📌 Roadmap
