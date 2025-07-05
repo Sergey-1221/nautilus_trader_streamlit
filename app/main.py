@@ -23,7 +23,7 @@ import plotly.graph_objects as go
 import streamlit as st
 try:
     from streamlit_lightweight_charts import renderLightweightCharts
-except Exception:  # package not installed
+except ImportError:
     renderLightweightCharts = None
 
 # ────────────────────────────── local code ───────────────────────────────────
@@ -222,6 +222,8 @@ def draw_dashboard(
     """
 
     # ── 0. basic run metadata (needed multiple times) ------------------------
+    is_dark = TPL == "plotly_dark"
+
     run_meta = {
         "Run ID": getattr(result, "run_id", uuid.uuid4()),
         "Run started": result.get("run_started", datetime.now(timezone.utc)),
@@ -837,7 +839,9 @@ def draw_dashboard(
     has_volume = "volume" in price_df.columns
 
     if renderLightweightCharts is None:
-        st.error("streamlit-lightweight-charts is required for this section.")
+        st.error(
+            "streamlit-lightweight-charts is required for this section."
+        )
     else:
         series = []
 
@@ -940,7 +944,14 @@ def draw_dashboard(
             ]
             series.append({"histogram": {"data": volume_data, "color": "#d1d5db"}})
 
-        renderLightweightCharts(series)
+        chart_opts = {
+            "layout": {
+                "background": {"color": "#111827" if is_dark else "#ffffff"},
+                "textColor": "#d1d5db" if is_dark else "#374151",
+            }
+        }
+
+        renderLightweightCharts(series, chart=chart_opts, key="price_chart")
 
     st.markdown("---")
 
