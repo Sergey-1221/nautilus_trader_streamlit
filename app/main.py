@@ -285,6 +285,14 @@ def draw_dashboard(
         if period_seconds > 0 and not trades_df.empty
         else np.nan
     )
+    avg_trade_h = (
+        (
+            trades_df["exit_time"] - trades_df["entry_time"]
+        ).dt.total_seconds().mean()
+        / 3600
+        if not trades_df.empty
+        else np.nan
+    )
     max_dd_pct = max_dd(equity_df["equity"]) * 100 if not equity_df.empty else np.nan
     pnl_dd_ratio = (
         (total_return * 100) / abs(max_dd_pct)
@@ -317,6 +325,7 @@ def draw_dashboard(
         "Annual Return": annual_return,
         "Profit/DD": pnl_dd_ratio,
         "Time in Market": tim,
+        "Avg Trade (h)": avg_trade_h,
     }
     KPI_ICONS = {
         "PnL ($)": "💰",
@@ -331,6 +340,7 @@ def draw_dashboard(
         "Annual Return": "📅",
         "Profit/DD": "⚡",
         "Time in Market": "⏱️",
+        "Avg Trade (h)": "⏳",
     }
 
     KPI_TOOLTIPS = {
@@ -345,6 +355,7 @@ def draw_dashboard(
         "Sortino": "Downside risk-adjusted return",
         "Profit Factor": "Gross profit divided by gross loss",
         "Win Rate": "Share of profitable trades",
+        "Avg Trade (h)": "Average trade duration in hours",
     }
 
     KPI_PCT_LABELS = {
@@ -428,8 +439,11 @@ def draw_dashboard(
                 "PnL (%)",
                 "Annual Return",
                 "Profit/DD",
+            ]
+            trade_order = [
                 "Win Rate",
                 "Profit Factor",
+                "Avg Trade (h)",
             ]
             risk_order = [
                 "Sharpe",
@@ -439,7 +453,7 @@ def draw_dashboard(
                 "Volatility (252d)",
             ]
 
-            for order in (perf_order, risk_order):
+            for order in (perf_order, trade_order, risk_order):
                 cols = st.columns(len(order))
                 for label, col in zip(order, cols):
                     value = kpi.get(label)
