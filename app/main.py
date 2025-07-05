@@ -22,9 +22,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 try:
-    from streamlit_lightweight_charts import renderLightweightCharts
-except Exception:  # package not installed
-    renderLightweightCharts = None
+    from lightweight_charts_v5 import lightweight_charts_v5_component as lwc
+except ImportError:
+    lwc = None
 
 # ────────────────────────────── local code ───────────────────────────────────
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
@@ -41,7 +41,7 @@ st.set_page_config(page_title="NautilusTrader Dashboard", layout="wide")
 # --- CSS tweaks --------------------------------------------------------------
 st.markdown(
     """
-    <style>
+    <style >
     /* grey background for the first expander header */
     div[data-testid="stExpander"] > details > summary {
         background-color:#f3f4f6 !important;  /* tailwind gray‑100 */
@@ -836,8 +836,10 @@ def draw_dashboard(
 
     has_volume = "volume" in price_df.columns
 
-    if renderLightweightCharts is None:
-        st.error("streamlit-lightweight-charts is required for this section.")
+    if lwc is None:
+        st.error(
+            "streamlit-lightweight-charts-v5 is required for this section."
+        )
     else:
         series = []
 
@@ -852,13 +854,13 @@ def draw_dashboard(
                 }
                 for idx, row in price_df.iterrows()
             ]
-            main_series = {"candlestick": {"data": price_data}}
+            main_series = {"type": "Candlestick", "data": price_data}
         else:
             price_data = [
                 {"time": idx.isoformat(), "value": val}
                 for idx, val in price_series.items()
             ]
-            main_series = {"line": {"data": price_data}}
+            main_series = {"type": "Line", "data": price_data}
 
         markers = []
         if not trades_df.empty:
@@ -910,7 +912,11 @@ def draw_dashboard(
                 {"time": idx.isoformat(), "value": val}
                 for idx, val in sma.items()
             ]
-            series.append({"line": {"data": sma_data, "color": "#6366f1"}})
+            series.append({
+                "type": "Line",
+                "data": sma_data,
+                "options": {"color": "#6366f1"},
+            })
 
         if show_ema:
             ema = price_series.ewm(span=21, adjust=False).mean()
@@ -918,7 +924,11 @@ def draw_dashboard(
                 {"time": idx.isoformat(), "value": val}
                 for idx, val in ema.items()
             ]
-            series.append({"line": {"data": ema_data, "color": "#fbbf24"}})
+            series.append({
+                "type": "Line",
+                "data": ema_data,
+                "options": {"color": "#fbbf24"},
+            })
 
         if {"exit_time", "profit"}.issubset(trades_df.columns):
             pnl_cum = (
@@ -931,16 +941,33 @@ def draw_dashboard(
                 {"time": idx.isoformat(), "value": val}
                 for idx, val in pnl_cum.items()
             ]
-            series.append({"line": {"data": pnl_data, "color": "#6b7280"}})
+            series.append({
+                "type": "Line",
+                "data": pnl_data,
+                "options": {"color": "#6b7280"},
+            })
 
         if has_volume:
             volume_data = [
                 {"time": idx.isoformat(), "value": row["volume"]}
                 for idx, row in price_df.iterrows()
             ]
-            series.append({"histogram": {"data": volume_data, "color": "#d1d5db"}})
+            series.append({
+                "type": "Histogram",
+                "data": volume_data,
+                "options": {"color": "#d1d5db"},
+            })
 
-        renderLightweightCharts(series)
+        charts = [{
+            "series": series,
+            "height": 600 if has_volume else 420,
+            "chart": {
+                "layout": {"textColor": "#000" if TPL == "plotly_white" else "#fff"},
+                "watermark": {"visible": False},
+            },
+        }]
+
+        lwc(name="price_chart", charts=charts, height=600 if has_volume else 420)
 
     st.markdown("---")
 
