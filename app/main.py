@@ -1294,7 +1294,7 @@ def draw_dashboard(
         selected_sides = st.pills(
             "Сторона сделки",
             ["Long", "Short"],
-            selection_mode="multiple",
+            selection_mode="multi",
             default=["Long", "Short"],
             key="side_filter",
         )
