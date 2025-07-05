@@ -180,9 +180,9 @@ def _fmt_btc(num: float | Decimal | None) -> str:
 def style_trades(df: pd.DataFrame) -> pd.DataFrame | pd.Styler:
     """Apply styling to the trades log table."""
     if "profit" in df.columns:
-        styler = df.style.applymap(
+        styler = df.style.map(
             lambda v: f"color: {'#10B981' if v > 0 else '#EF4444'}",
-            subset=["profit"],
+            subset="profit",
         )
         return styler
     return df
@@ -498,11 +498,10 @@ def draw_dashboard(
             else np.nan
         )
         max_dd_pct = max_dd(equity_df["equity"]) * 100 if not equity_df.empty else np.nan
-        pnl_dd_ratio = (
-            (total_return * 100) / abs(max_dd_pct)
-            if not np.isnan(max_dd_pct) and not np.isnan(total_return)
-            else np.nan
-        )
+        if not np.isnan(max_dd_pct) and not np.isnan(total_return) and max_dd_pct != 0:
+            pnl_dd_ratio = (total_return * 100) / abs(max_dd_pct)
+        else:
+            pnl_dd_ratio = np.nan
         if not equity_df.empty:
             bh_final = (
                 price_series.reindex(equity_df.index, method="ffill").iloc[-1]
@@ -1138,7 +1137,7 @@ def draw_dashboard(
             )
 
             monthly_heat = (
-                strategy_returns.resample("M")
+                strategy_returns.resample("ME")
                 .sum()
                 .to_frame("ret")
                 .assign(
