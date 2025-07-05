@@ -138,8 +138,9 @@ def load_bars(csv_path: str):
 
     ts = df["timestamp"]
     if pd.api.types.is_numeric_dtype(ts):
-        ts_int = pd.to_numeric(ts, errors="coerce").astype("Int64")
-        digits = ts_int.dropna().astype(str).str.len().mode()[0]
+        ts_num = pd.to_numeric(ts, errors="coerce")
+        ts_int = ts_num.fillna(0).astype("Int64")
+        digits = ts_int.dropna().abs().astype(str).str.len().mode()[0]
         if digits >= 18:
             unit = "ns"
         elif digits >= 16:
