@@ -837,9 +837,120 @@ def draw_dashboard(
     has_volume = "volume" in price_df.columns
 
     if lwc is None:
-        st.error(
-            "streamlit-lightweight-charts-v5 is required for this section."
+        st.info(
+            "streamlit-lightweight-charts-v5 not installed. Using Plotly fallback.",
         )
+
+        fig = go.Figure()
+        if price_style == "Candlesticks" and {"open", "high", "low", "close"}.issubset(
+            price_df.columns
+        ):
+            fig.add_trace(
+                go.Candlestick(
+                    x=price_df.index,
+                    open=price_df["open"],
+                    high=price_df["high"],
+                    low=price_df["low"],
+                    close=price_df["close"],
+                    name="Price",
+                )
+            )
+        else:
+            fig.add_trace(
+                go.Scatter(
+                    x=price_series.index,
+                    y=price_series.values,
+                    mode="lines",
+                    name="Price",
+                )
+            )
+
+        if show_sma:
+            sma = price_series.rolling(50).mean()
+            fig.add_trace(
+                go.Scatter(
+                    x=sma.index,
+                    y=sma.values,
+                    mode="lines",
+                    line=dict(color="#6366f1"),
+                    name="50 SMA",
+                )
+            )
+
+        if show_ema:
+            ema = price_series.ewm(span=21, adjust=False).mean()
+            fig.add_trace(
+                go.Scatter(
+                    x=ema.index,
+                    y=ema.values,
+                    mode="lines",
+                    line=dict(color="#fbbf24"),
+                    name="21 EMA",
+                )
+            )
+
+        if not trades_df.empty:
+            buys = trades_df[trades_df.get("entry_side", "").str.upper() == "LONG"]
+            sells = trades_df[trades_df.get("entry_side", "").str.upper() == "SELL"]
+
+            if show_long and not buys.empty:
+                fig.add_trace(
+                    go.Scatter(
+                        x=buys["entry_time"],
+                        y=buys["entry_price"],
+                        mode="markers",
+                        marker_symbol="triangle-up",
+                        marker_color=ACCENT,
+                        name="Buy",
+                    )
+                )
+
+            if show_short and not sells.empty:
+                fig.add_trace(
+                    go.Scatter(
+                        x=sells["entry_time"],
+                        y=sells["entry_price"],
+                        mode="markers",
+                        marker_symbol="triangle-down",
+                        marker_color=NEG,
+                        name="Sell",
+                    )
+                )
+
+            if show_exit and {"exit_time", "profit"}.issubset(trades_df.columns):
+                fig.add_trace(
+                    go.Scatter(
+                        x=trades_df["exit_time"],
+                        y=trades_df["exit_price"],
+                        mode="markers",
+                        marker_symbol="circle",
+                        marker_color="#6b7280",
+                        name="Exit",
+                    )
+                )
+
+        if has_volume:
+            fig.add_trace(
+                go.Bar(
+                    x=price_df.index,
+                    y=price_df["volume"],
+                    name="Volume",
+                    marker_color="#d1d5db",
+                    yaxis="y2",
+                )
+            )
+            fig.update_layout(
+                yaxis2=dict(
+                    overlaying="y",
+                    side="right",
+                    showgrid=False,
+                    title="Volume",
+                )
+            )
+
+        fig.update_layout(template=TPL, height=600 if has_volume else 420)
+        st.plotly_chart(fig, use_container_width=True)
+
     else:
         series = []
 
