@@ -308,6 +308,42 @@ def draw_dashboard(
         longest = max(longest, (series.index[-1] - peak_idx).days)
         return float(longest)
 
+    def dd_periods(series: pd.Series) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
+        """Return start and end timestamps for all drawdown phases."""
+        if series.empty:
+            return []
+        peak = series.iloc[0]
+        start = None
+        periods: list[tuple[pd.Timestamp, pd.Timestamp]] = []
+        for ts, val in series.items():
+            if val < peak:
+                if start is None:
+                    start = ts
+            else:
+                if start is not None:
+                    periods.append((start, ts))
+                    start = None
+                peak = val
+        if start is not None:
+            periods.append((start, series.index[-1]))
+        return periods
+
+    def avg_dd_days(series: pd.Series) -> float:
+        """Average drawdown duration in days."""
+        durs = [(e - s).days for s, e in dd_periods(series)]
+        return float(np.mean(durs)) if durs else np.nan
+
+    def total_dd_days(series: pd.Series) -> float:
+        """Total time spent in drawdowns in days."""
+        durs = [(e - s).days for s, e in dd_periods(series)]
+        return float(np.sum(durs)) if durs else np.nan
+
+    def max_dd_abs(series: pd.Series) -> float:
+        """Return the maximum drawdown in currency units."""
+        if series.empty:
+            return np.nan
+        return float((series.cummax() - series).max())
+
     def longest_dd_span(series: pd.Series) -> tuple[pd.Timestamp, pd.Timestamp]:
         """Return start and end timestamps of the longest drawdown."""
         if series.empty:
@@ -382,6 +418,9 @@ def draw_dashboard(
     longest_dd_len = (
         longest_dd_days(equity_df["equity"]) if not equity_df.empty else np.nan
     )
+    avg_dd_len = avg_dd_days(equity_df["equity"]) if not equity_df.empty else np.nan
+    total_dd_len = total_dd_days(equity_df["equity"]) if not equity_df.empty else np.nan
+    max_dd_dollars = max_dd_abs(equity_df["equity"]) if not equity_df.empty else np.nan
     dd_start, dd_end = (
         longest_dd_span(equity_df["equity"]) if not equity_df.empty else (pd.NaT, pd.NaT)
     )
@@ -399,6 +438,9 @@ def draw_dashboard(
         "Sortino": sortino(strategy_returns),
         "Max DD (%)": max_dd_pct,
         "Longest DD (days)": longest_dd_len,
+        "Avg DD (days)": avg_dd_len,
+        "Total DD (days)": total_dd_len,
+        "Max DD ($)": max_dd_dollars,
         "Profit Factor": result.get("metrics", {}).get("profit_factor", np.nan),
         "Volatility (252d)": (
             strategy_returns.std(ddof=0) * np.sqrt(252)
@@ -419,6 +461,9 @@ def draw_dashboard(
         "Sortino": "📐",
         "Max DD (%)": "📉",
         "Longest DD (days)": "🕳️",
+        "Avg DD (days)": "⏱️",
+        "Total DD (days)": "🕒",
+        "Max DD ($)": "💸",
         "Profit Factor": "🚀",
         "Volatility (252d)": "📊",
         "Annual Return": "📅",
@@ -436,6 +481,9 @@ def draw_dashboard(
         "Time in Market": "Percentage of time with open positions",
         "Max DD (%)": "Maximum equity drawdown in percent",
         "Longest DD (days)": "Longest drawdown period in days",
+        "Avg DD (days)": "Average duration of drawdowns in days",
+        "Total DD (days)": "Total time spent in drawdowns",
+        "Max DD ($)": "Largest peak-to-trough drop in account balance",
         "Sharpe": "Risk-adjusted return ratio",
         "Sortino": "Downside risk-adjusted return",
         "Profit Factor": "Gross profit divided by gross loss",
@@ -538,6 +586,9 @@ def draw_dashboard(
                 "Sortino",
                 "Max DD (%)",
                 "Longest DD (days)",
+                "Avg DD (days)",
+                "Total DD (days)",
+                "Max DD ($)",
                 "Volatility (252d)",
             ]
 
@@ -548,7 +599,7 @@ def draw_dashboard(
                     icon = KPI_ICONS.get(label, "")
                     tip = KPI_TOOLTIPS.get(label, "")
                     is_pct = label in KPI_PCT_LABELS
-                    precision = 0 if label == "Longest DD (days)" else 2
+                    precision = 0 if label in {"Longest DD (days)", "Avg DD (days)", "Total DD (days)"} else 2
                     text = _fmt_pct(value) if is_pct else _fmt_num(value, precision)
                     col.metric(f"{icon} {label}", text, help=tip)
 
@@ -749,6 +800,17 @@ def draw_dashboard(
         )
         if log_y:
             fig_eq.update_yaxes(type="log")
+        if pd.notna(dd_start) and pd.notna(dd_end):
+            fig_eq.add_vrect(
+                x0=dd_start,
+                x1=dd_end,
+                fillcolor="grey",
+                opacity=0.25,
+                layer="below",
+                annotation_text="Longest DD",
+            )
+            fig_eq.add_vline(x=dd_start, line_dash="dash", line_color=NEG)
+            fig_eq.add_vline(x=dd_end, line_dash="dash", line_color=ACCENT)
         st.plotly_chart(fig_eq, use_container_width=True)
     else:
         st.info("Equity data unavailable.")

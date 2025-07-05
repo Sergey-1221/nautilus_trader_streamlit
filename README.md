@@ -39,6 +39,8 @@ The two charts are shown one under the other, making it easy to relate profit gr
 
 You can focus on any time range using the built‑in date slider and toggle logarithmic scaling. The dashboard also reports your edge over the benchmark as **Edge vs B&H (%)**.
 
+The longest drawdown is highlighted on both charts. Additional metrics show its duration, the average and total time spent in drawdowns, and the deepest loss in dollars.
+
 ---
 
 ## 📌 Roadmap
