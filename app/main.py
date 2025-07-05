@@ -421,10 +421,27 @@ def draw_dashboard(
             hdr[2].metric("Elapsed", run_meta["Elapsed time"])
             hdr[3].metric("Orders", run_meta["Total orders"])
 
-            items = list(kpi.items())
-            for i in range(0, len(items), 4):
-                row = st.columns(4)
-                for (label, value), col in zip(items[i : i + 4], row):
+
+            perf_order = [
+                "PnL ($)",
+                "PnL (%)",
+                "Annual Return",
+                "Profit/DD",
+                "Win Rate",
+                "Profit Factor",
+            ]
+            risk_order = [
+                "Sharpe",
+                "Sortino",
+                "Max DD (%)",
+                "Max DD (days)",
+                "Volatility (252d)",
+            ]
+
+            for order in (perf_order, risk_order):
+                cols = st.columns(len(order))
+                for label, col in zip(order, cols):
+                    value = kpi.get(label)
                     icon = KPI_ICONS.get(label, "")
                     tip = KPI_TOOLTIPS.get(label, "")
                     is_pct = label in KPI_PCT_LABELS
@@ -432,6 +449,10 @@ def draw_dashboard(
                     text = _fmt_pct(value) if is_pct else _fmt_num(value, precision)
                     col.metric(f"{icon} {label}", text, help=tip)
 
+            tim = kpi.get("Time in Market")
+            if tim is not None and not (isinstance(tim, float) and np.isnan(tim)):
+                st.write("Time in Market")
+                st.progress(float(tim))
         # === Tab 1: Balances & Fees ==============================================
         with perf_tabs[1]:
             bal_cols = st.columns(4)
