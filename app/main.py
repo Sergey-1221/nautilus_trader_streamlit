@@ -941,7 +941,7 @@ def draw_dashboard(
             ]
             series.append({"histogram": {"data": volume_data, "color": "#d1d5db"}})
 
-        renderLightweightCharts(series, height=600 if has_volume else 420)
+        renderLightweightCharts(series)
 
     st.markdown("---")
 
