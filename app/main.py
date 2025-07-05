@@ -251,7 +251,57 @@ def draw_dashboard(
             else np.nan
         )
 
+    def max_dd_days(series: pd.Series) -> float:
+        if series.empty:
+            return np.nan
+        running_max = series.cummax()
+        dd = running_max - series
+        end = dd.idxmax()
+        start = series.loc[:end].idxmax()
+        return (end - start).days
+
     comm_total = sum(result.get("commissions", {}).values())
+
+    # Additional performance metrics
+    period_seconds = (
+        run_meta["Backtest end"] - run_meta["Backtest start"]
+    ).total_seconds()
+    total_return = (
+        (equity_df["equity"].iloc[-1] - equity_df["equity"].iloc[0])
+        / equity_df["equity"].iloc[0]
+        if not equity_df.empty
+        else np.nan
+    )
+    annual_return = (
+        (1 + total_return) ** (365 * 24 * 3600 / period_seconds) - 1
+        if period_seconds > 0 and not np.isnan(total_return)
+        else np.nan
+    )
+    tim = (
+        (
+            trades_df["exit_time"] - trades_df["entry_time"]
+        ).dt.total_seconds().sum()
+        / period_seconds * 100
+        if period_seconds > 0 and not trades_df.empty
+        else np.nan
+    )
+    avg_trade_h = (
+        (
+            trades_df["exit_time"] - trades_df["entry_time"]
+        ).dt.total_seconds().mean()
+        / 3600
+        if not trades_df.empty
+        else np.nan
+    )
+    max_dd_pct = max_dd(equity_df["equity"]) * 100 if not equity_df.empty else np.nan
+    pnl_dd_ratio = (
+        (total_return * 100) / abs(max_dd_pct)
+        if not np.isnan(max_dd_pct) and not np.isnan(total_return)
+        else np.nan
+    )
+    max_dd_len = (
+        max_dd_days(equity_df["equity"]) if not equity_df.empty else np.nan
+    )
 
     kpi = {
         "PnL ($)": result.get("metrics", {}).get("total_profit", np.nan),
@@ -264,15 +314,18 @@ def draw_dashboard(
         "Win Rate": result.get("metrics", {}).get("win_rate", np.nan),
         "Sharpe": sharpe(strategy_returns),
         "Sortino": sortino(strategy_returns),
-        "Max DD (%)": (
-            max_dd(equity_df["equity"]) * 100 if not equity_df.empty else np.nan
-        ),
+        "Max DD (%)": max_dd_pct,
+        "Max DD (days)": max_dd_len,
         "Profit Factor": result.get("metrics", {}).get("profit_factor", np.nan),
         "Volatility (252d)": (
             strategy_returns.std(ddof=0) * np.sqrt(252)
             if not strategy_returns.empty
             else np.nan
         ),
+        "Annual Return": annual_return,
+        "Profit/DD": pnl_dd_ratio,
+        "Time in Market": tim,
+        "Avg Trade (h)": avg_trade_h,
     }
     KPI_ICONS = {
         "PnL ($)": "💰",
@@ -281,9 +334,44 @@ def draw_dashboard(
         "Sharpe": "⚖️",
         "Sortino": "📐",
         "Max DD (%)": "📉",
+        "Max DD (days)": "🕳️",
         "Profit Factor": "🚀",
         "Volatility (252d)": "📊",
+        "Annual Return": "📅",
+        "Profit/DD": "⚡",
+        "Time in Market": "⏱️",
+        "Avg Trade (h)": "⏳",
     }
+
+    KPI_TOOLTIPS = {
+        "PnL ($)": "Net profit in base currency",
+        "PnL (%)": "Total return over the test period",
+        "Annual Return": "Compound annual growth rate",
+        "Profit/DD": "Profit to drawdown ratio",
+        "Time in Market": "Percentage of time with open positions",
+        "Max DD (%)": "Maximum equity drawdown in percent",
+        "Max DD (days)": "Duration of the largest drawdown",
+        "Sharpe": "Risk-adjusted return ratio",
+        "Sortino": "Downside risk-adjusted return",
+        "Profit Factor": "Gross profit divided by gross loss",
+        "Win Rate": "Share of profitable trades",
+        "Avg Trade (h)": "Average trade duration in hours",
+    }
+
+    KPI_PCT_LABELS = {
+        "PnL (%)",
+        "Win Rate",
+        "Max DD (%)",
+        "Annual Return",
+        "Time in Market",
+    }
+
+    _fmt_pct = lambda v: (
+        "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{v:+.2%}"
+    )
+    _fmt_num = lambda v, p=2: (
+        "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{v:,.{p}f}"
+    )
 
     extra_stats = parse_extra_stats(log_text)
 
@@ -314,15 +402,9 @@ def draw_dashboard(
 
     # ╭──────────────────── 💹 ACCOUNT & Performance ────────────────────────────╮
 
-    _fmt_pct = lambda v: (
-        "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{v:+.2%}"
-    )
-    _fmt_num = lambda v, p=2: (
-        "—" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{v:,.{p}f}"
-    )
-
     with st.container(border=True):
         st.subheader("💹 Account & Performance")
+
 
         # ------------------------------------------------------------------
         # We analyse the entire back-test by default.
@@ -338,6 +420,7 @@ def draw_dashboard(
                 "PnL",
                 "Return & Risk",
                 "General",
+                "Time in Market",
             ]
         )
 
@@ -350,13 +433,36 @@ def draw_dashboard(
             hdr[2].metric("Elapsed", run_meta["Elapsed time"])
             hdr[3].metric("Orders", run_meta["Total orders"])
 
-            # KPI grid
-            kcols = st.columns(len(kpi))
-            for (label, value), col in zip(kpi.items(), kcols):
-                icon = KPI_ICONS.get(label, "")
-                is_pct = any(tok in label for tok in ("%", "PnL", "DD"))
-                text = _fmt_pct(value) if is_pct else _fmt_num(value)
-                col.metric(f"{icon} {label}", text)
+
+            perf_order = [
+                "PnL ($)",
+                "PnL (%)",
+                "Annual Return",
+                "Profit/DD",
+            ]
+            trade_order = [
+                "Win Rate",
+                "Profit Factor",
+                "Avg Trade (h)",
+            ]
+            risk_order = [
+                "Sharpe",
+                "Sortino",
+                "Max DD (%)",
+                "Max DD (days)",
+                "Volatility (252d)",
+            ]
+
+            for order in (perf_order, trade_order, risk_order):
+                cols = st.columns(len(order))
+                for label, col in zip(order, cols):
+                    value = kpi.get(label)
+                    icon = KPI_ICONS.get(label, "")
+                    tip = KPI_TOOLTIPS.get(label, "")
+                    is_pct = label in KPI_PCT_LABELS
+                    precision = 0 if label == "Max DD (days)" else 2
+                    text = _fmt_pct(value) if is_pct else _fmt_num(value, precision)
+                    col.metric(f"{icon} {label}", text, help=tip)
 
         # === Tab 1: Balances & Fees ==============================================
         with perf_tabs[1]:
@@ -450,6 +556,15 @@ def draw_dashboard(
             st.metric("Positions", run_meta.get("Total positions", "—"))
             st.metric("Trades", len(trades_df) if not trades_df.empty else 0)
 
+        # === Tab 5: Time in Market ===========================================
+        with perf_tabs[5]:
+            tim = kpi.get("Time in Market")
+            if tim is not None and not (isinstance(tim, float) and np.isnan(tim)):
+                st.metric("⏱️ Time in Market", _fmt_pct(tim))
+                st.progress(float(tim) / 100)
+            else:
+                st.info("Time-in-market unavailable.")
+
     # ① Price & Trades --------------------------------------------------------
     st.subheader("📉 Price & Trades")
     fig_pt = go.Figure()
@@ -502,8 +617,8 @@ def draw_dashboard(
     st.markdown("---")
 
     # ② Equity | Drawdown | Fees ---------------------------------------------
-    st.subheader("📈 Equity | Drawdown | Fees")
-    tabs_eq = st.tabs(["Equity", "Drawdown", "Fees"])
+    st.subheader("📈 Equity & Drawdown")
+    col_eq, col_dd = st.columns(2)
 
     if not equity_df.empty:
         first_equity = (
@@ -516,7 +631,7 @@ def draw_dashboard(
             {"Equity": equity_df["equity"], "Start Balance": start_balance_series}
         ).dropna()
 
-        tabs_eq[0].plotly_chart(
+        col_eq.plotly_chart(
             px.line(
                 eq_plot_df,
                 x=eq_plot_df.index,
@@ -527,18 +642,18 @@ def draw_dashboard(
             use_container_width=True,
         )
     else:
-        tabs_eq[0].info("Equity data unavailable.")
+        col_eq.info("Equity data unavailable.")
 
     if not equity_df.empty:
         dd = (equity_df["equity"].cummax() - equity_df["equity"]) / equity_df[
             "equity"
         ].cummax()
-        tabs_eq[1].plotly_chart(
+        col_dd.plotly_chart(
             px.area(x=dd.index, y=dd.values, template=TPL),
             use_container_width=True,
         )
     else:
-        tabs_eq[1].warning("Equity data unavailable.")
+        col_dd.warning("Equity data unavailable.")
 
     if "commission" in trades_df.columns:
         trades_df["comm_cum"] = trades_df["commission"].cumsum()
@@ -551,13 +666,14 @@ def draw_dashboard(
     else:
         fee_series = pd.Series(dtype=float)
 
-    if not fee_series.empty:
-        tabs_eq[2].plotly_chart(
-            px.line(x=fee_series.index, y=fee_series.values, template=TPL),
-            use_container_width=True,
-        )
-    else:
-        tabs_eq[2].info("No commissions recorded.")
+    with st.expander("Fees over time", expanded=False):
+        if not fee_series.empty:
+            st.plotly_chart(
+                px.line(x=fee_series.index, y=fee_series.values, template=TPL),
+                use_container_width=True,
+            )
+        else:
+            st.info("No commissions recorded.")
     st.markdown("---")
 
     # ③ Risk & Seasonality ----------------------------------------------------
@@ -574,60 +690,61 @@ def draw_dashboard(
         rbeta = (cov / benchmark_returns.rolling(roll).var(ddof=0)).dropna()
         rsharp = strategy_returns.rolling(roll).apply(lambda s: sharpe(s)).dropna()
 
-        risk_tabs = st.tabs(["Distribution & VaR", "Rolling metrics", "Seasonality"])
+        with st.expander("Advanced analysis", expanded=False):
+            risk_tabs = st.tabs(["Distribution & VaR", "Rolling metrics", "Seasonality"])
 
-        # ── Distribution & VaR ───────────────────────────────────────────────
-        var5 = np.percentile(strategy_returns, 5)
-        hist = px.histogram(
-            strategy_returns, nbins=60, template=TPL, title="Return distribution"
-        )
-        hist.add_vline(x=var5, line_color=NEG, annotation_text="VaR 5%")
-        risk_tabs[0].plotly_chart(hist, use_container_width=True)
-
-        # ── Rolling metrics (по факту – одно значение на конец периода) ─────
-        fig_roll = go.Figure()
-        fig_roll.add_trace(
-            go.Scatter(x=rsharp.index, y=rsharp, name="Sharpe (full window)")
-        )
-        fig_roll.add_trace(
-            go.Scatter(x=rvol.index, y=rvol, name="Volatility (full window)")
-        )
-        fig_roll.add_trace(
-            go.Scatter(x=rbeta.index, y=rbeta, name="Beta (full window)")
-        )
-        fig_roll.update_layout(template=TPL, height=350, legend_orientation="h")
-        risk_tabs[1].plotly_chart(fig_roll, use_container_width=True)
-
-        # ── Seasonality ─────────────────────────────────────────────────────
-        wd_ret = strategy_returns.groupby(strategy_returns.index.weekday).mean() * 100
-        week_bar = px.bar(
-            x=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-            y=wd_ret.reindex(range(7)).fillna(0),
-            template=TPL,
-            title="Average return by weekday",
-        )
-
-        monthly_heat = (
-            strategy_returns.resample("M")
-            .sum()
-            .to_frame("ret")
-            .assign(
-                Year=lambda d: d.index.year,
-                Month=lambda d: d.index.month_name().str[:3],
+            # ── Distribution & VaR ───────────────────────────────────────────────
+            var5 = np.percentile(strategy_returns, 5)
+            hist = px.histogram(
+                strategy_returns, nbins=60, template=TPL, title="Return distribution"
             )
-        )
-        pivot = monthly_heat.pivot(index="Year", columns="Month", values="ret").fillna(
-            0
-        )
-        heatmap = px.imshow(
-            pivot,
-            color_continuous_scale="RdYlGn",
-            template=TPL,
-            title="Monthly return heatmap",
-        )
+            hist.add_vline(x=var5, line_color=NEG, annotation_text="VaR 5%")
+            risk_tabs[0].plotly_chart(hist, use_container_width=True)
 
-        risk_tabs[2].plotly_chart(week_bar, use_container_width=True)
-        risk_tabs[2].plotly_chart(heatmap, use_container_width=True)
+            # ── Rolling metrics (по факту – одно значение на конец периода) ─────
+            fig_roll = go.Figure()
+            fig_roll.add_trace(
+                go.Scatter(x=rsharp.index, y=rsharp, name="Sharpe (full window)")
+            )
+            fig_roll.add_trace(
+                go.Scatter(x=rvol.index, y=rvol, name="Volatility (full window)")
+            )
+            fig_roll.add_trace(
+                go.Scatter(x=rbeta.index, y=rbeta, name="Beta (full window)")
+            )
+            fig_roll.update_layout(template=TPL, height=350, legend_orientation="h")
+            risk_tabs[1].plotly_chart(fig_roll, use_container_width=True)
+
+            # ── Seasonality ─────────────────────────────────────────────────────
+            wd_ret = strategy_returns.groupby(strategy_returns.index.weekday).mean() * 100
+            week_bar = px.bar(
+                x=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+                y=wd_ret.reindex(range(7)).fillna(0),
+                template=TPL,
+                title="Average return by weekday",
+            )
+
+            monthly_heat = (
+                strategy_returns.resample("M")
+                .sum()
+                .to_frame("ret")
+                .assign(
+                    Year=lambda d: d.index.year,
+                    Month=lambda d: d.index.month_name().str[:3],
+                )
+            )
+            pivot = monthly_heat.pivot(index="Year", columns="Month", values="ret").fillna(
+                0
+            )
+            heatmap = px.imshow(
+                pivot,
+                color_continuous_scale="RdYlGn",
+                template=TPL,
+                title="Monthly return heatmap",
+            )
+
+            risk_tabs[2].plotly_chart(week_bar, use_container_width=True)
+            risk_tabs[2].plotly_chart(heatmap, use_container_width=True)
 
     st.markdown("---")
 
@@ -690,23 +807,25 @@ def draw_dashboard(
         ).style.format("{:.4f}")
     )
 
-    if not trades_df.empty:
-        cols_show = [
-            "entry_time",
-            "exit_time",
-            "entry_price",
-            "exit_price",
-            "profit",
-            "commission" if "commission" in trades_df.columns else None,
-        ]
-        cols_show = [c for c in cols_show if c and c in trades_df.columns]
-        tab_log.dataframe(
-            style_trades(trades_df[cols_show]),
-            use_container_width=True,
-            height=350,
-        )
-    else:
-        tab_log.info("No trades recorded.")
+    with tab_log:
+        if not trades_df.empty:
+            cols_show = [
+                "entry_time",
+                "exit_time",
+                "entry_price",
+                "exit_price",
+                "profit",
+                "commission" if "commission" in trades_df.columns else None,
+            ]
+            cols_show = [c for c in cols_show if c and c in trades_df.columns]
+            with st.expander("List of trades", expanded=False):
+                st.dataframe(
+                    style_trades(trades_df[cols_show]),
+                    use_container_width=True,
+                    height=350,
+                )
+        else:
+            st.info("No trades recorded.")
 
     tab_extra.code(
         "\n".join(line for line in log_text.splitlines() if "BacktestEngine:" in line),
