@@ -20,7 +20,6 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import streamlit as st
 try:
     from streamlit_lightweight_charts import renderLightweightCharts
@@ -828,14 +827,6 @@ def draw_dashboard(
     show_short = controls[1].checkbox("Show shorts", value=True)
     show_exit = controls[2].checkbox("Show exits", value=True)
 
-    use_light = False
-    if renderLightweightCharts is not None:
-        use_light = st.checkbox(
-            "Use lightweight chart",
-            value=len(price_series) > 2000,
-            help="Streamlit-lightweight-charts for large datasets",
-        )
-
     chart_opts = st.columns(3)
     price_style = chart_opts[0].selectbox(
         "Price style",
@@ -846,142 +837,13 @@ def draw_dashboard(
 
     has_volume = "volume" in price_df.columns
 
-    fig_pt = make_subplots(
-        rows=2 if has_volume else 1,
-        cols=1,
-        shared_xaxes=True,
-        vertical_spacing=0.05,
-        specs=[[{"secondary_y": True}]] + ([[{}]] if has_volume else []),
-        row_heights=[0.7, 0.3] if has_volume else [1.0],
-    )
-
-    if price_style == "Candlesticks" and {"open", "high", "low", "close"}.issubset(price_df.columns):
-        fig_pt.add_trace(
-            go.Candlestick(
-                x=price_df.index,
-                open=price_df["open"],
-                high=price_df["high"],
-                low=price_df["low"],
-                close=price_df["close"],
-                name="Price",
-            ),
-            row=1,
-            col=1,
-        )
+    if renderLightweightCharts is None:
+        st.error("streamlit-lightweight-charts is required for this section.")
     else:
-        fig_pt.add_trace(
-            go.Scatter(x=price_series.index, y=price_series, mode="lines", name="Price"),
-            row=1,
-            col=1,
-        )
+        series = []
 
-    if show_sma:
-        sma = price_series.rolling(50).mean()
-        fig_pt.add_trace(
-            go.Scatter(x=sma.index, y=sma, mode="lines", name="50 SMA", line=dict(color="#6366f1")),
-            row=1,
-            col=1,
-        )
-    if show_ema:
-        ema = price_series.ewm(span=21, adjust=False).mean()
-        fig_pt.add_trace(
-            go.Scatter(x=ema.index, y=ema, mode="lines", name="21 EMA", line=dict(color="#fbbf24")),
-            row=1,
-            col=1,
-        )
-
-    if not trades_df.empty:
-        buys = trades_df[trades_df.get("entry_side", "").str.upper() == "LONG"]
-        sells = trades_df[trades_df.get("entry_side", "").str.upper() == "SELL"]
-
-        if show_long and not buys.empty:
-            fig_pt.add_trace(
-                go.Scatter(
-                    x=buys["entry_time"],
-                    y=buys["entry_price"],
-                    mode="markers",
-                    marker_symbol="triangle-up",
-                    marker_color=ACCENT,
-                    name="Buy",
-                    hovertemplate="%{x|%Y-%m-%d %H:%M}<br>Buy: %{y:.2f}",
-                ),
-                row=1,
-                col=1,
-            )
-        if show_short and not sells.empty:
-            fig_pt.add_trace(
-                go.Scatter(
-                    x=sells["entry_time"],
-                    y=sells["entry_price"],
-                    mode="markers",
-                    marker_symbol="triangle-down",
-                    marker_color=NEG,
-                    name="Sell short",
-                    hovertemplate="%{x|%Y-%m-%d %H:%M}<br>Sell: %{y:.2f}",
-                ),
-                row=1,
-                col=1,
-            )
-        if show_exit and {"exit_time", "exit_price"}.issubset(trades_df.columns):
-            fig_pt.add_trace(
-                go.Scatter(
-                    x=trades_df["exit_time"],
-                    y=trades_df["exit_price"],
-                    mode="markers",
-                    marker_symbol="circle",
-                    marker_size=8,
-                    marker_color="#EF4444",
-                    name="Exit",
-                    hovertemplate="%{x|%Y-%m-%d %H:%M}<br>Exit: %{y:.2f}",
-                ),
-                row=1,
-                col=1,
-            )
-
-        if {"exit_time", "profit"}.issubset(trades_df.columns):
-            pnl_cum = (
-                trades_df.sort_values("exit_time")
-                .set_index("exit_time")["profit"]
-                .cumsum()
-            )
-            pnl_cum = pnl_cum.reindex(price_series.index, method="ffill").fillna(0)
-            fig_pt.add_trace(
-                go.Scatter(
-                    x=price_series.index,
-                    y=pnl_cum,
-                    mode="lines",
-                    line=dict(color="#6b7280", dash="dot"),
-                    name="PnL",
-                ),
-                secondary_y=True,
-                row=1,
-                col=1,
-            )
-
-    if has_volume:
-        fig_pt.add_trace(
-            go.Bar(
-                x=price_df.index,
-                y=price_df["volume"],
-                marker_color="#d1d5db",
-                name="Volume",
-            ),
-            row=2,
-            col=1,
-        )
-        fig_pt.update_yaxes(title_text="Volume", row=2, col=1)
-
-    fig_pt.update_layout(
-        template=TPL,
-        height=600 if has_volume else 420,
-        margin=dict(l=0, r=0, b=0, t=25),
-        showlegend=True,
-    )
-
-    if use_light and renderLightweightCharts is not None:
-        candle_cols = {"open", "high", "low", "close"}
-        if candle_cols.issubset(price_df.columns):
-            candles = [
+        if price_style == "Candlesticks" and {"open", "high", "low", "close"}.issubset(price_df.columns):
+            price_data = [
                 {
                     "time": idx.isoformat(),
                     "open": row["open"],
@@ -991,14 +853,96 @@ def draw_dashboard(
                 }
                 for idx, row in price_df.iterrows()
             ]
-            renderLightweightCharts(
-                [{"candlestick": {"data": candles}}],
-                height=600 if has_volume else 420,
-            )
+            main_series = {"candlestick": {"data": price_data}}
         else:
-            st.info("Candlestick data unavailable for lightweight chart.")
-    else:
-        st.plotly_chart(fig_pt, use_container_width=True)
+            price_data = [
+                {"time": idx.isoformat(), "value": val}
+                for idx, val in price_series.items()
+            ]
+            main_series = {"line": {"data": price_data}}
+
+        markers = []
+        if not trades_df.empty:
+            buys = trades_df[trades_df.get("entry_side", "").str.upper() == "LONG"]
+            sells = trades_df[trades_df.get("entry_side", "").str.upper() == "SELL"]
+
+            if show_long and not buys.empty:
+                for _, row in buys.iterrows():
+                    markers.append(
+                        {
+                            "time": row["entry_time"].isoformat(),
+                            "position": "belowBar",
+                            "color": ACCENT,
+                            "shape": "arrowUp",
+                            "text": "Buy",
+                        }
+                    )
+            if show_short and not sells.empty:
+                for _, row in sells.iterrows():
+                    markers.append(
+                        {
+                            "time": row["entry_time"].isoformat(),
+                            "position": "aboveBar",
+                            "color": NEG,
+                            "shape": "arrowDown",
+                            "text": "Sell",
+                        }
+                    )
+            if show_exit and {"exit_time", "exit_price"}.issubset(trades_df.columns):
+                for _, row in trades_df.iterrows():
+                    markers.append(
+                        {
+                            "time": row["exit_time"].isoformat(),
+                            "position": "aboveBar",
+                            "color": "#6b7280",
+                            "shape": "circle",
+                            "text": "Exit",
+                        }
+                    )
+
+        if markers:
+            main_series["markers"] = markers
+
+        series.append(main_series)
+
+        if show_sma:
+            sma = price_series.rolling(50).mean()
+            sma_data = [
+                {"time": idx.isoformat(), "value": val}
+                for idx, val in sma.items()
+            ]
+            series.append({"line": {"data": sma_data, "color": "#6366f1"}})
+
+        if show_ema:
+            ema = price_series.ewm(span=21, adjust=False).mean()
+            ema_data = [
+                {"time": idx.isoformat(), "value": val}
+                for idx, val in ema.items()
+            ]
+            series.append({"line": {"data": ema_data, "color": "#fbbf24"}})
+
+        if {"exit_time", "profit"}.issubset(trades_df.columns):
+            pnl_cum = (
+                trades_df.sort_values("exit_time")
+                .set_index("exit_time")["profit"]
+                .cumsum()
+            )
+            pnl_cum = pnl_cum.reindex(price_series.index, method="ffill").fillna(0)
+            pnl_data = [
+                {"time": idx.isoformat(), "value": val}
+                for idx, val in pnl_cum.items()
+            ]
+            series.append({"line": {"data": pnl_data, "color": "#6b7280"}})
+
+        if has_volume:
+            volume_data = [
+                {"time": idx.isoformat(), "value": row["volume"]}
+                for idx, row in price_df.iterrows()
+            ]
+            series.append({"histogram": {"data": volume_data, "color": "#d1d5db"}})
+
+        renderLightweightCharts(series, height=600 if has_volume else 420)
+
     st.markdown("---")
 
     # ② Equity | Drawdown | Fees ---------------------------------------------
