@@ -22,9 +22,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 try:
-    from streamlit_lightweight_charts import renderLightweightCharts
+    from lightweight_charts_v5 import lightweight_charts_v5_component
 except ImportError:
-    renderLightweightCharts = None
+    lightweight_charts_v5_component = None
 
 # ────────────────────────────── local code ───────────────────────────────────
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
@@ -836,9 +836,9 @@ def draw_dashboard(
 
     has_volume = "volume" in price_df.columns
 
-    if renderLightweightCharts is None:
+    if lightweight_charts_v5_component is None:
         st.error(
-            "streamlit-lightweight-charts is required for this section."
+            "streamlit-lightweight-charts-v5 is required for this section."
         )
     else:
         series = []
@@ -942,7 +942,11 @@ def draw_dashboard(
             ]
             series.append({"histogram": {"data": volume_data, "color": "#d1d5db"}})
 
-        renderLightweightCharts(series, key="price_chart")
+        lightweight_charts_v5_component(
+            name="price_chart",
+            charts=series,
+            height=600 if has_volume else 420,
+        )
 
     st.markdown("---")
 
