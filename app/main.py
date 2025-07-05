@@ -951,7 +951,7 @@ def draw_dashboard(
             }
         }
 
-        renderLightweightCharts(series, chart=chart_opts, key="price_chart")
+        renderLightweightCharts(series, options=chart_opts, key="price_chart")
 
     st.markdown("---")
 
