@@ -22,6 +22,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import streamlit as st
+try:
+    from streamlit_lightweight_charts import renderLightweightCharts
+except Exception:  # package not installed
+    renderLightweightCharts = None
 
 # ────────────────────────────── local code ───────────────────────────────────
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
@@ -824,6 +828,14 @@ def draw_dashboard(
     show_short = controls[1].checkbox("Show shorts", value=True)
     show_exit = controls[2].checkbox("Show exits", value=True)
 
+    use_light = False
+    if renderLightweightCharts is not None:
+        use_light = st.checkbox(
+            "Use lightweight chart",
+            value=len(price_series) > 2000,
+            help="Streamlit-lightweight-charts for large datasets",
+        )
+
     has_volume = "volume" in price_df.columns
 
     fig_pt = make_subplots(
@@ -929,7 +941,27 @@ def draw_dashboard(
         showlegend=True,
     )
 
-    st.plotly_chart(fig_pt, use_container_width=True)
+    if use_light and renderLightweightCharts is not None:
+        candle_cols = {"open", "high", "low", "close"}
+        if candle_cols.issubset(price_df.columns):
+            candles = [
+                {
+                    "time": idx.isoformat(),
+                    "open": row["open"],
+                    "high": row["high"],
+                    "low": row["low"],
+                    "close": row["close"],
+                }
+                for idx, row in price_df.iterrows()
+            ]
+            renderLightweightCharts(
+                [{"candlestick": {"data": candles}}],
+                height=600 if has_volume else 420,
+            )
+        else:
+            st.info("Candlestick data unavailable for lightweight chart.")
+    else:
+        st.plotly_chart(fig_pt, use_container_width=True)
     st.markdown("---")
 
     # ② Equity | Drawdown | Fees ---------------------------------------------

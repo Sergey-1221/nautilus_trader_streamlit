@@ -19,6 +19,7 @@ NautilusTrader is a rapidly evolving open-source platform for algorithmic tradin
 * ✅ **Time-saving**: quickly identify bugs and strategy issues.
 * ✅ **Improved visuals**: themed widgets, icons and styled data tables.
 * ✅ **Price chart enhancements**: trade markers, optional volume bars and cumulative PnL overlay.
+* ✅ **Fast charting**: uses `streamlit-lightweight-charts` to render thousands of bars smoothly.
 * ✅ **Structured metrics**: grouped performance KPIs with a progress bar showing edge over buy‑and‑hold.
 
 ---
