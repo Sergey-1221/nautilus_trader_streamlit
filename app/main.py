@@ -1252,8 +1252,53 @@ def draw_dashboard(
     # ④ Trades statistics ----------------------------------------------------
     st.subheader("Trades statistics")
     if not trades_df.empty:
-        sides = ["Long", "Short"]
-        selected_sides = st.multiselect("Filter by side", sides, default=sides)
+        # -- Filter by position side using custom styled pills ---------
+        st.markdown(
+            """
+            <style>
+            [data-testid="stBaseButton-pillsInactive"] {
+                background:#e0e0e0;
+                color:#555;
+                border:1px solid #bdbdbd;
+            }
+            [data-testid="stBaseButton-pillsActive"] {
+                color:#fff;
+            }
+            div[data-testid="stBaseButton-pillsItem"]:nth-child(1)
+              [data-testid="stBaseButton-pillsActive"]{
+                background:#2ecc71;
+                border-color:#2ecc71;
+            }
+            div[data-testid="stBaseButton-pillsItem"]:nth-child(1)
+              [data-testid="stBaseButton-pillsInactive"]{
+                background:#f0fff6;
+                color:#2ecc71;
+                border-color:#2ecc71;
+            }
+            div[data-testid="stBaseButton-pillsItem"]:nth-child(2)
+              [data-testid="stBaseButton-pillsActive"]{
+                background:#e74c3c;
+                border-color:#e74c3c;
+            }
+            div[data-testid="stBaseButton-pillsItem"]:nth-child(2)
+              [data-testid="stBaseButton-pillsInactive"]{
+                background:#fff4f3;
+                color:#e74c3c;
+                border-color:#e74c3c;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        selected_sides = st.pills(
+            "Сторона сделки",
+            ["Long", "Short"],
+            selection_mode="multiple",
+            default=["Long", "Short"],
+            key="side_filter",
+        )
+
         df_view = trades_df.copy()
         if selected_sides:
             df_view = df_view[df_view["entry_side"].str.capitalize().isin(selected_sides)]
