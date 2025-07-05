@@ -942,9 +942,11 @@ def draw_dashboard(
             ]
             series.append({"histogram": {"data": volume_data, "color": "#d1d5db"}})
 
+        charts = [{"series": series}]
+
         lightweight_charts_v5_component(
             name="price_chart",
-            charts=series,
+            charts=charts,
             height=600 if has_volume else 420,
         )
 
