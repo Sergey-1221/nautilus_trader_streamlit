@@ -874,7 +874,7 @@ def draw_dashboard(
                             "position": "belowBar",
                             "color": ACCENT,
                             "shape": "arrowUp",
-                            "text": "Buy",
+                            "text": f"Buy\n@ {row['entry_price']:.2f}",
                         }
                     )
             if show_short and not sells.empty:
@@ -885,10 +885,10 @@ def draw_dashboard(
                             "position": "aboveBar",
                             "color": NEG,
                             "shape": "arrowDown",
-                            "text": "Sell",
+                            "text": f"Sell\n@ {row['entry_price']:.2f}",
                         }
                     )
-            if show_exit and {"exit_time", "exit_price"}.issubset(trades_df.columns):
+            if show_exit and {"exit_time", "profit"}.issubset(trades_df.columns):
                 for _, row in trades_df.iterrows():
                     markers.append(
                         {
@@ -896,7 +896,7 @@ def draw_dashboard(
                             "position": "aboveBar",
                             "color": "#6b7280",
                             "shape": "circle",
-                            "text": "Exit",
+                            "text": f"Exit\n{row['profit']:+.2f}",
                         }
                     )
 
