@@ -59,16 +59,6 @@ st.markdown(
     [data-testid="stSidebar"] [data-testid="stTabs"] {
         margin-top:0;
     }
-    /* hide TradingView attribution logo */
-    .tv-lightweight-charts__copyright {
-        display:none !important;
-    }
-    .tv-lightweight-charts__logo {
-        display:none !important;
-    }
-    #tv-attr-logo {
-        display:none !important;
-    }
     </style>
     """,
     unsafe_allow_html=True,
