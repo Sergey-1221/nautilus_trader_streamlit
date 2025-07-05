@@ -409,6 +409,7 @@ def draw_dashboard(
                 "PnL",
                 "Return & Risk",
                 "General",
+                "Time in Market",
             ]
         )
 
@@ -449,10 +450,6 @@ def draw_dashboard(
                     text = _fmt_pct(value) if is_pct else _fmt_num(value, precision)
                     col.metric(f"{icon} {label}", text, help=tip)
 
-            tim = kpi.get("Time in Market")
-            if tim is not None and not (isinstance(tim, float) and np.isnan(tim)):
-                st.write("Time in Market")
-                st.progress(float(tim) / 100)
         # === Tab 1: Balances & Fees ==============================================
         with perf_tabs[1]:
             bal_cols = st.columns(4)
@@ -544,6 +541,15 @@ def draw_dashboard(
             )
             st.metric("Positions", run_meta.get("Total positions", "—"))
             st.metric("Trades", len(trades_df) if not trades_df.empty else 0)
+
+        # === Tab 5: Time in Market ===========================================
+        with perf_tabs[5]:
+            tim = kpi.get("Time in Market")
+            if tim is not None and not (isinstance(tim, float) and np.isnan(tim)):
+                st.metric("⏱️ Time in Market", _fmt_pct(tim))
+                st.progress(float(tim) / 100)
+            else:
+                st.info("Time-in-market unavailable.")
 
     # ① Price & Trades --------------------------------------------------------
     st.subheader("📉 Price & Trades")
