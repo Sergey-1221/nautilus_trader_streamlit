@@ -37,7 +37,10 @@ from nautilus_trader.trading.strategy import Strategy
 class EMACrossConfig(StrategyConfig):
     instrument_id: InstrumentId
     bar_type: BarType
-    trade_size: Decimal = Decimal("1000")
+    # A huge default trade size can easily exhaust the small starting
+    # balances used in sample backtests.  Use a default of 1 unit so
+    # the strategy behaves realistically out of the box.
+    trade_size: Decimal = Decimal("1")
     fast_period: int = 12
     slow_period: int = 26
 
