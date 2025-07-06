@@ -234,7 +234,9 @@ def _init_engine(instr, bars, balance: float = 10_000.0) -> BacktestEngine:
             Money(Decimal(str(balance)), USDT),
             Money(Decimal("1.0"), BTC),
         ],  # Use Decimal for Money
-        base_currency=None,
+        # Specify a base currency so the risk engine can convert positions
+        # into the same denomination when evaluating account balances.
+        base_currency=USDT,
     )
     engine.add_instrument(instr)
     engine.add_data(bars)
