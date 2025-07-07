@@ -964,6 +964,7 @@ def draw_dashboard(
             "chart": {
                 "layout": {"textColor": "#000" if TPL == "plotly_white" else "#fff"},
                 "watermark": {"visible": False},
+                "timeScale": {"fitContent": True},
             },
         }]
 
