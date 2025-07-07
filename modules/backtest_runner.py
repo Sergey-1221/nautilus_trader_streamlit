@@ -226,19 +226,15 @@ def load_bars(csv_path: str):
 
 def _init_engine(instr, bars, balance: float = 10_000.0) -> BacktestEngine:
     engine = BacktestEngine()
-    # ``add_venue`` in some ``nautilus_trader`` releases only accepts positional
-    # arguments and requires a non-empty ``starting_balances`` list.  Provide a
-    # single USDT balance so the venue can be created with ``USDT`` as the base
-    # currency.  Some library versions expose ``add_cash_account`` for injecting
-    # additional balances, but others do not.  To remain compatible we simply
-    # fund the venue with USDT here and rely on strategy trades to acquire BTC
-    # as needed.
     engine.add_venue(
         Venue("BINANCE"),
-        OmsType.NETTING,
-        AccountType.CASH,
-        [Money(Decimal(str(balance)), USDT)],
-        base_currency=USDT,
+        oms_type=OmsType.NETTING,
+        account_type=AccountType.CASH,
+        starting_balances=[
+            Money(Decimal(str(balance)), USDT),
+            Money(Decimal("1.0"), BTC),
+        ],
+        base_currency=None,
     )
     engine.add_instrument(instr)
     engine.add_data(bars)
