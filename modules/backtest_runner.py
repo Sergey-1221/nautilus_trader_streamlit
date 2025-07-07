@@ -230,13 +230,19 @@ def _init_engine(instr, bars, balance: float = 10_000.0) -> BacktestEngine:
         Venue("BINANCE"),
         oms_type=OmsType.NETTING,
         account_type=AccountType.CASH,
-        starting_balances=[
-            Money(Decimal(str(balance)), USDT),
-            Money(Decimal("1.0"), BTC),
-        ],  # Use Decimal for Money
-        # Specify a base currency so the risk engine can convert positions
-        # into the same denomination when evaluating account balances.
+        # The venue itself has no starting balances; we'll add a cash
+        # account explicitly so balances in multiple currencies can be
+        # specified while maintaining a single base currency for risk
+        # calculations.
         base_currency=USDT,
+    )
+    engine.add_cash_account(
+        account_id="BINANCE-001",
+        base_currency=USDT,
+        balances={
+            "USDT": Decimal(str(balance)),
+            "BTC": Decimal("1.0"),
+        },
     )
     engine.add_instrument(instr)
     engine.add_data(bars)
