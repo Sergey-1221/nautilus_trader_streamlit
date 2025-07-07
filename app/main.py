@@ -959,8 +959,8 @@ def draw_dashboard(
             })
 
         visible_range = {
-            "from": int(price_df.index[0].timestamp()),
-            "to": int(price_df.index[-1].timestamp()),
+            "from": price_df.index[0].strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "to": price_df.index[-1].strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
 
         charts = [{
