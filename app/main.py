@@ -958,13 +958,21 @@ def draw_dashboard(
                 "options": {"color": "#d1d5db"},
             })
 
+        visible_range = {
+            "from": int(price_df.index[0].timestamp()),
+            "to": int(price_df.index[-1].timestamp()),
+        }
+
         charts = [{
             "series": series,
             "height": 600 if has_volume else 420,
             "chart": {
                 "layout": {"textColor": "#000" if TPL == "plotly_white" else "#fff"},
                 "watermark": {"visible": False},
-                "timeScale": {"fitContent": True},
+                "timeScale": {
+                    "fitContent": True,
+                    "visibleRange": visible_range,
+                },
             },
         }]
 
