@@ -73,7 +73,7 @@ The **Risk & Seasonality** block aggregates several metrics:
   * UI/UX improvements.
   * Modular configuration support.
 
-If you find this project helpful - give it a ⭐ and share your feedback. The more community interest, the faster the tool will evolve!
+If you find this project helpful — give it a ⭐ and share your feedback. The more community interest, the faster the tool will evolve.
 
 ---
 
