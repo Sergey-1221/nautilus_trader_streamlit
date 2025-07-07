@@ -226,14 +226,15 @@ def load_bars(csv_path: str):
 
 def _init_engine(instr, bars, balance: float = 10_000.0) -> BacktestEngine:
     engine = BacktestEngine()
+    # `add_venue` requires the `starting_balances` parameter positionally
+    # even if we want the account balances managed separately. Provide an
+    # empty list so the venue itself starts with no cash.  Balances are then
+    # injected via `add_cash_account` below.
     engine.add_venue(
         Venue("BINANCE"),
-        oms_type=OmsType.NETTING,
-        account_type=AccountType.CASH,
-        # The venue itself has no starting balances; we'll add a cash
-        # account explicitly so balances in multiple currencies can be
-        # specified while maintaining a single base currency for risk
-        # calculations.
+        OmsType.NETTING,
+        AccountType.CASH,
+        [],
         base_currency=USDT,
     )
     engine.add_cash_account(

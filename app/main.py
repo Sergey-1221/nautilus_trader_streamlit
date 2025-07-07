@@ -1629,12 +1629,13 @@ with st.sidebar:
                     data_df,
                     actor_cls=DashboardPublisher,  # only if supported
                 )
-            except TypeError:  # actor_cls not accepted
+            except TypeError:  # actor_cls not accepted or other init error
                 result = run_backtest(
                     info.strategy_cls,
                     info.cfg_cls,
                     params,
                     data_df,
+                    actor_cls=DashboardPublisher,
                 )
         log_text = log_stream.getvalue()
 
