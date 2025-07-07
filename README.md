@@ -33,6 +33,12 @@ Run the app:
 streamlit run app/main.py
 ```
 
+## 📝 Custom Strategies
+
+New to NautilusTrader? Check the brief guide in
+[docs/custom_strategies.md](docs/custom_strategies.md) on how to implement and
+load your own strategy classes.
+
 ## 📈 Equity & Drawdown
 
 The dashboard visualizes how the account balance evolves and how deep the drawdowns were.
