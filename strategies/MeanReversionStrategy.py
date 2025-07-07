@@ -130,7 +130,9 @@ class MeanReversionConfig(StrategyConfig):
     boll_period: int = 20
     boll_std: float = 2.0
     rsi_period: int = 14
-    trade_size: Decimal = Decimal("1")
+    # Use a small default position size so the demo account can
+    # open trades without exceeding its 10k USDT balance.
+    trade_size: Decimal = Decimal("0.1")
 
 # Стратегия возврата к среднему
 class MeanReversionStrategy(Strategy):

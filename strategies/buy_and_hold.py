@@ -16,11 +16,11 @@ class BuyAndHoldConfig(StrategyConfig):
 
     instrument_id: InstrumentId
     bar_type: BarType
-    # Default trade size set high for reference implementations can
-    # deplete available balance in small test accounts.  Use a more
-    # conservative 1 unit by default to better match the 1 BTC balance
-    # created in `modules/backtest_runner._init_engine`.
-    trade_size: Decimal = Decimal("1")
+    # Default trade sizes of hundreds of units quickly exhaust the
+    # modest 10k USDT starting balance used in the example backtests.
+    # A size of ``0.1`` BTC keeps the order well within that budget
+    # while still demonstrating position management.
+    trade_size: Decimal = Decimal("0.1")
 
 
 class BuyAndHoldStrategy(Strategy):

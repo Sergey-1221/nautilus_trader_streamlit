@@ -63,7 +63,9 @@ class TrendFollowingConfig(StrategyConfig):
     bar_type: BarType
     N: int = 20
     atr_period: int = 14
-    trade_size: Decimal = Decimal("1")
+    # A smaller default size keeps sample backtests running even with
+    # the modest 10k USDT balance configured in ``backtest_runner``.
+    trade_size: Decimal = Decimal("0.1")
 
 
 # Стратегия следования за трендом на основе пробоя диапазона Дончиана
