@@ -230,9 +230,11 @@ def _init_engine(instr, bars, balance: float = 10_000.0) -> BacktestEngine:
         Venue("BINANCE"),
         oms_type=OmsType.NETTING,
         account_type=AccountType.CASH,
+        # base_currency=None → мультивалютный счёт начиная с версии 1.171
         starting_balances=[
             Money(Decimal(str(balance)), USDT),
-            Money(Decimal("1.0"), BTC),
+            # второй баланс в BTC (0 достаточно) даёт возможность шортить
+            Money(Decimal("0"), BTC),
         ],
         base_currency=None,
     )
@@ -324,7 +326,7 @@ def run_backtest(
     cfg_cls: Type[StrategyConfig],
     params: Dict[str, Any],
     data: Any,
-    actor_cls: Type,  # <-- ИЗМЕНЕНИЕ: Добавлен параметр actor_cls
+    actor_cls: Type,
     reuse_engine: Optional[BacktestEngine] = None,
 ) -> Dict[str, Any]:
     """Run a back-test using either a CSV path or a ready DataFrame."""
@@ -351,7 +353,7 @@ def run_backtest(
         }
         cfg_args.update(instrument_id=instr.id, bar_type=bar_type)
         engine.add_strategy(strat_cls(cfg_cls(**cfg_args)))
-        engine.add_actor(actor_cls())  # <-- ИЗМЕНЕНИЕ: Добавлено добавление актора
+        engine.add_actor(actor_cls())
         engine.run()
     else:
         engine = reuse_engine

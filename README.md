@@ -4,7 +4,7 @@
 
 ## 🎯 Project Goal
 
-**Create a simple and convenient Streamlit-based extension for the NautilusTrader platform, enabling developers to quickly visualize, analyze, and convincingly demonstrate the performance of trading strategies to investors and teams-without wasting time on complex frontend development.**
+**Create a simple and convenient Streamlit-based extension for the NautilusTrader platform, enabling developers to quickly visualize, analyze, and convincingly demonstrate the performance of trading strategies to investors and teams — without wasting time on complex frontend development.**
 
 NautilusTrader is a rapidly evolving open-source platform for algorithmic trading. This project emerged from the need to simplify and accelerate the visualization of strategy data created with it.
 

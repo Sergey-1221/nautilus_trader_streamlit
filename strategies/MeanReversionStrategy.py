@@ -28,7 +28,7 @@ class BollingerBandsIndicator(Indicator):
         if not self.has_inputs:
             self._set_has_inputs(True)
 
-        price = bar.close.as_decimal() # <--- ИЗМЕНЕНО ЗДЕСЬ
+        price = bar.close.as_decimal()
         self.values.append(price)
 
         if len(self.values) == self.period:
@@ -73,7 +73,7 @@ class RSIIndicator(Indicator):
         if not self.has_inputs:
             self._set_has_inputs(True)
 
-        price = bar.close.as_decimal() # <--- ИЗМЕНЕНО ЗДЕСЬ
+        price = bar.close.as_decimal()
 
         if self.last_close is None:
             self.last_close = price
@@ -152,7 +152,7 @@ class MeanReversionStrategy(Strategy):
             return
 
         # Преобразуем Timestamp, возвращаемый clock.utc_now(), в целое число наносекунд
-        self.time_started = self.clock.utc_now().value # <--- ИЗМЕНЕНО ЗДЕСЬ
+        self.time_started = self.clock.utc_now().value
 
         # Регистрируем индикаторы
         self.register_indicator_for_bars(self.config.bar_type, self.boll)
@@ -167,7 +167,7 @@ class MeanReversionStrategy(Strategy):
             return
 
         # Игнорируем исторические бары после прогрева, используя ts_event
-        if self.time_started and bar.ts_event < self.time_started: # <--- ИЗМЕНЕНО ЗДЕСЬ
+        if self.time_started and bar.ts_event < self.time_started:
             # Это исторический бар, который уже был использован для прогрева индикаторов.
             # Пропускаем его для генерации торговых сигналов.
             return
@@ -178,7 +178,11 @@ class MeanReversionStrategy(Strategy):
         rsi_val = self.rsi.value
 
         if mid is None or upper is None or lower is None or rsi_val is None:
-            self.log.warn(f"Indicator values not ready at {bar.ts_event}: BB({self.boll.middle}, {self.boll.upper}, {self.boll.lower}), RSI({self.rsi.value})") # Также изменил здесь для логгирования
+            self.log.warning(
+                f"Indicator values not ready at {bar.ts_event}: "
+                f"BB({self.boll.middle}, {self.boll.upper}, {self.boll.lower}), "
+                f"RSI({self.rsi.value})"
+            )
             return
 
         current_close_price = bar.close.as_decimal()
@@ -195,7 +199,9 @@ class MeanReversionStrategy(Strategy):
                 )
                 self.submit_order(order)
                 self.position_side = 'LONG'
-                self.log.info(f"Opened LONG position at {current_close_price} on bar {bar.ts_event}") # Пример логгирования
+                self.log.info(
+                    f"Opened LONG position at {current_close_price} on bar {bar.ts_event}"
+                )
             elif current_close_price > upper and rsi_val > Decimal("70"):
                 qty = self.instrument.make_qty(self.config.trade_size)
                 order = self.order_factory.market(
@@ -206,7 +212,9 @@ class MeanReversionStrategy(Strategy):
                 )
                 self.submit_order(order)
                 self.position_side = 'SHORT'
-                self.log.info(f"Opened SHORT position at {current_close_price} on bar {bar.ts_event}") # Пример логгирования
+                self.log.info(
+                    f"Opened SHORT position at {current_close_price} on bar {bar.ts_event}"
+                )
         # === Логика выхода (Exit signals) ===
         else:
             if self.position_side == 'LONG' and current_close_price >= mid:
@@ -218,7 +226,9 @@ class MeanReversionStrategy(Strategy):
                     time_in_force=TimeInForce.GTC
                 )
                 self.submit_order(order)
-                self.log.info(f"Closed LONG position at {current_close_price} on bar {bar.ts_event}") # Пример логгирования
+                self.log.info(
+                    f"Closed LONG position at {current_close_price} on bar {bar.ts_event}"
+                )
                 self.position_side = None
             elif self.position_side == 'SHORT' and current_close_price <= mid:
                 qty = self.instrument.make_qty(self.config.trade_size)
@@ -229,7 +239,9 @@ class MeanReversionStrategy(Strategy):
                     time_in_force=TimeInForce.GTC
                 )
                 self.submit_order(order)
-                self.log.info(f"Closed SHORT position at {current_close_price} on bar {bar.ts_event}") # Пример логгирования
+                self.log.info(
+                    f"Closed SHORT position at {current_close_price} on bar {bar.ts_event}"
+                )
                 self.position_side = None
 
     def on_stop(self) -> None:
@@ -242,12 +254,12 @@ class MeanReversionStrategy(Strategy):
         net_exposure_money = self.portfolio.net_exposure(self.config.instrument_id)
 
         # Проверяем, что net_exposure_money не None И его значение в Decimal не равно нулю
-        if net_exposure_money is not None and net_exposure_money.as_decimal() != Decimal("0"): # <--- ИЗМЕНЕНО ЗДЕСЬ
-            # Определяем сторону для закрытия позиции
-            side = OrderSide.SELL if net_exposure_money.as_decimal() > Decimal("0") else OrderSide.BUY # <--- Используем as_decimal() для определения стороны
+        if net_exposure_money is not None and net_exposure_money.as_decimal() != Decimal("0"):
+            side = (
+                OrderSide.SELL if net_exposure_money.as_decimal() > Decimal("0") else OrderSide.BUY
+            )
             # Получаем абсолютное значение количества в Decimal
             abs_qty_decimal = abs(net_exposure_money.as_decimal())
-            # Преобразуем Decimal количество в Quantity
             qty = self.instrument.make_qty(abs_qty_decimal)
 
             # Создаем и отправляем ордер на закрытие
@@ -255,8 +267,10 @@ class MeanReversionStrategy(Strategy):
                 instrument_id=self.config.instrument_id,
                 order_side=side,
                 quantity=qty,
-                time_in_force=TimeInForce.FOK # Fill-Or-Kill для закрытия позиции
+                time_in_force=TimeInForce.FOK,
             )
             self.submit_order(close_order)
-            self.log.info(f"Submitted closing order for {self.config.instrument_id} with quantity {qty}") # Пример логгирования
+            self.log.info(
+                f"Submitted closing order for {self.config.instrument_id} with quantity {qty}"
+            )
 
