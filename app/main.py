@@ -963,16 +963,22 @@ def draw_dashboard(
             "to": price_df.index[-1].strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
 
+        time_scale_opts = {
+            "minBarSpacing": 0.001,  # allow strong compression
+            "rightOffset": 0,
+            "fixLeftEdge": True,
+            "fixRightEdge": True,
+            "fitContent": True,
+            "visibleRange": visible_range,
+        }
+
         charts = [{
             "series": series,
             "height": 600 if has_volume else 420,
             "chart": {
                 "layout": {"textColor": "#000" if TPL == "plotly_white" else "#fff"},
                 "watermark": {"visible": False},
-                "timeScale": {
-                    "fitContent": True,
-                    "visibleRange": visible_range,
-                },
+                "timeScale": time_scale_opts,
             },
         }]
 
