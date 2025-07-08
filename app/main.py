@@ -1543,8 +1543,8 @@ with st.sidebar:
 
     if stx:
         data_tabs = [
-            stx.TabBarItemData(id="csv", title="CSV"),
-            stx.TabBarItemData(id="ch", title="ClickHouse"),
+            stx.TabBarItemData(id="csv", title="CSV", description="Load data from CSV"),
+            stx.TabBarItemData(id="ch", title="ClickHouse", description="Load data from ClickHouse"),
         ]
         chosen_id = stx.tab_bar(
             data=data_tabs,
