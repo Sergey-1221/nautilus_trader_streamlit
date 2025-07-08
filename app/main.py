@@ -66,6 +66,14 @@ st.markdown(
 
 st.title("NautilusTrader — dashboard")
 
+# Store back-test outputs so they persist across reruns
+if "bt_result" not in st.session_state:
+    st.session_state["bt_result"] = None
+    st.session_state["bt_log"] = ""
+    st.session_state["bt_tpl"] = "plotly_white"
+    st.session_state["bt_accent"] = "#10B981"
+    st.session_state["bt_neg"] = "#EF4444"
+
 
 # ╭──────────────────────── helper utilities ─────────────────────────────────╮
 def is_simple(v: Any) -> bool:
@@ -1604,13 +1612,13 @@ with st.sidebar:
         else:
             params[field] = st.text_input(label, value=str(default or ""))
 
-    theme = st.selectbox("Theme", ["Light", "Dark"], index=0)
-    TPL = "plotly_dark" if theme == "Dark" else "plotly_white"
-    ACCENT, NEG = ("#10B981", "#EF4444") if theme == "Light" else ("#22D3EE", "#F43F5E")
-
     st.markdown("---")
     run_csv = tab_csv.button("Run back‑test", key="run_csv")
     run_ch = tab_ch.button("Run back‑test", key="run_ch")
+
+    theme = st.selectbox("Theme", ["Light", "Dark"], index=0)
+    TPL = "plotly_dark" if theme == "Dark" else "plotly_white"
+    ACCENT, NEG = ("#10B981", "#EF4444") if theme == "Light" else ("#22D3EE", "#F43F5E")
 
 # end sidebar ---------------------------------------------------------------
 
@@ -1664,4 +1672,18 @@ if run_csv or run_ch:
                     actor_cls=DashboardPublisher,
                 )
         log_text = log_stream.getvalue()
-    draw_dashboard(result, log_text, TPL, ACCENT, NEG)
+
+    st.session_state["bt_result"] = result
+    st.session_state["bt_log"] = log_text
+    st.session_state["bt_tpl"] = TPL
+    st.session_state["bt_accent"] = ACCENT
+    st.session_state["bt_neg"] = NEG
+
+if st.session_state.get("bt_result") is not None:
+    draw_dashboard(
+        st.session_state["bt_result"],
+        st.session_state["bt_log"],
+        st.session_state["bt_tpl"],
+        st.session_state["bt_accent"],
+        st.session_state["bt_neg"],
+    )
