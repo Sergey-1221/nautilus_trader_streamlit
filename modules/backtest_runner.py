@@ -6,6 +6,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, Optional, Type
 
+import numpy as np
 import pandas as pd
 from nautilus_trader.backtest.engine import BacktestEngine
 from nautilus_trader.config import StrategyConfig
@@ -321,6 +322,33 @@ def _order_fills_to_dataframe(fills) -> pd.DataFrame:
     )
 
 
+def rebuild_equity_curve(
+    price_index: pd.DatetimeIndex,
+    trades_df: pd.DataFrame,
+    start_balance: float = 10_000.0,
+) -> pd.Series:
+    """Construct a simple equity curve from trade profits."""
+    price_index = pd.to_datetime(price_index)
+    if getattr(price_index, "tz", None) is not None:
+        price_index = price_index.tz_convert(None)
+
+    if trades_df.empty:
+        return pd.Series(start_balance, index=price_index)
+
+    pnl = (
+        trades_df.sort_values("exit_time")
+        .set_index("exit_time")["profit"]
+        .cumsum()
+    )
+    if getattr(pnl.index, "tz", None) is not None:
+        pnl.index = pnl.index.tz_convert(None)
+    pnl = pnl.reindex(price_index, method="ffill").fillna(0.0)
+    equity = start_balance + pnl
+    equity = equity.reindex(price_index, method="ffill")
+    equity.iloc[0] = start_balance
+    return equity
+
+
 def run_backtest(
     strat_cls: Type[Strategy],
     cfg_cls: Type[StrategyConfig],
@@ -608,13 +636,22 @@ def run_backtest(
 
             except Exception as exc:
                 _logger.warning("PortfolioAnalyzer failed: %s", exc, exc_info=True)
-                # Если анализатор не сработал, можно попытаться рассчитать эквити вручную как fallback
-                # (код ручного расчета эквити был в исходной версии, но его можно опустить,
-                # если анализатор является предпочтительным методом)
-                _logger.warning(
-                    "Falling back to manual equity calculation (if implemented) or empty stats."
-                )
-                # Если ручной расчет не реализован, equity_df останется пустым, max_dd = 0.0
+                _logger.warning("Falling back to manual equity calculation.")
+                start_balance = 10_000.0
+                try:
+                    account_obj = trader.get_account(Venue("BINANCE"))
+                    bal = getattr(account_obj, "cash_balance", None)
+                    if callable(bal):
+                        start_balance = float(bal(USDT).as_double())
+                except Exception:
+                    pass
+                equity_series = rebuild_equity_curve(price_df.index, trades_df, start_balance)
+                equity_df = equity_series.to_frame(name="equity")
+                if not equity_df.empty:
+                    roll_max = equity_df.equity.cummax()
+                    max_dd = (roll_max - equity_df.equity).max()
+                else:
+                    max_dd = 0.0
 
     # Если PortfolioAnalyzer не был использован или не дал кривую эквити,
     # можно добавить здесь ручной расчет как fallback, если это необходимо.
@@ -630,11 +667,21 @@ def run_backtest(
         else 0.0
     )
 
+    profit_factor = np.nan
+    if not trades_df.empty:
+        gains = trades_df.loc[trades_df["profit"] > 0, "profit"].sum()
+        losses = trades_df.loc[trades_df["profit"] < 0, "profit"].sum()
+        if losses != 0:
+            profit_factor = gains / abs(losses)
+
     metrics = {
         "total_profit": round(total_profit, 2),
         "max_drawdown": round(float(max_dd), 2),  # max_dd уже float или 0.0
         "num_trades": num_trades,
         "win_rate": win_rate,
+        "profit_factor": round(float(profit_factor), 2)
+        if not np.isnan(profit_factor)
+        else np.nan,
     }
 
     # Получение комиссий
