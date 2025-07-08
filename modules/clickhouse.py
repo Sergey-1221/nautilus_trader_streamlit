@@ -185,6 +185,18 @@ class ClickHouseConnector:
             )
             df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
             df.set_index("timestamp", inplace=True)
+            num_cols = [
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "quote_vol",
+                "trades",
+                "taker_base",
+                "taker_quote",
+            ]
+            df[num_cols] = df[num_cols].astype("float64")
             return df
 
         # ──────── данных нет → диагностируем min/max ─────────── #
