@@ -1525,7 +1525,7 @@ with st.sidebar:
         end_csv = datetime.now(timezone.utc).date()
     start_ch = start_csv
     end_ch = end_csv
-    data_src = st.radio("Data source", ["CSV", "ClickHouse"], horizontal=True, key="data_src_tab")
+    data_src = st.selectbox("Data source", ["CSV", "ClickHouse"], key="data_src_select")
     if data_src == "CSV":
         row1 = st.columns(3)
         exchange_csv = csv_exchs[0] if csv_exchs else ""
@@ -1626,32 +1626,32 @@ with st.sidebar:
         start_dt = datetime.combine(start_ch, datetime.min.time())
         end_dt = datetime.combine(end_ch, datetime.min.time())
 
-    if run_bt and data_source:
-        with st.spinner("Running back‑test… please wait"):
-            connector = DataConnector()
-            data_df = connector.load(data_source, data_spec, start=start_dt, end=end_dt)
+if run_bt and data_source:
+    with st.spinner("Running back‑test… please wait"):
+        connector = DataConnector()
+        data_df = connector.load(data_source, data_spec, start=start_dt, end=end_dt)
 
-            if data_df.empty:
-                st.error("No data found for the selected date range.")
-                st.stop()
+        if data_df.empty:
+            st.error("No data found for the selected date range.")
+            st.stop()
 
-            log_stream = io.StringIO()
-            with redirect_stdout(log_stream), redirect_stderr(log_stream):
-                try:
-                    result = run_backtest(
-                        info.strategy_cls,
-                        info.cfg_cls,
-                        params,
-                        data_df,
-                        actor_cls=DashboardPublisher,  # only if supported
-                    )
-                except TypeError:  # actor_cls not accepted or other init error
-                    result = run_backtest(
-                        info.strategy_cls,
-                        info.cfg_cls,
-                        params,
-                        data_df,
-                        actor_cls=DashboardPublisher,
-                    )
-            log_text = log_stream.getvalue()
-        draw_dashboard(result, log_text, TPL, ACCENT, NEG)
+        log_stream = io.StringIO()
+        with redirect_stdout(log_stream), redirect_stderr(log_stream):
+            try:
+                result = run_backtest(
+                    info.strategy_cls,
+                    info.cfg_cls,
+                    params,
+                    data_df,
+                    actor_cls=DashboardPublisher,  # only if supported
+                )
+            except TypeError:  # actor_cls not accepted or other init error
+                result = run_backtest(
+                    info.strategy_cls,
+                    info.cfg_cls,
+                    params,
+                    data_df,
+                    actor_cls=DashboardPublisher,
+                )
+        log_text = log_stream.getvalue()
+    draw_dashboard(result, log_text, TPL, ACCENT, NEG)
