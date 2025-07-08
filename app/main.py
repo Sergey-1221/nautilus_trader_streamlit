@@ -1525,8 +1525,9 @@ with st.sidebar:
         end_csv = datetime.now(timezone.utc).date()
     start_ch = start_csv
     end_ch = end_csv
+    data_src = st.radio("Data source", ["CSV", "ClickHouse"], horizontal=True,
+                        key="data_src_tab")
     tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"])
-    data_src = None
 
     with tab_csv:
         row1 = st.columns(3)
@@ -1569,8 +1570,6 @@ with st.sidebar:
         else:
             csv_path = ""
         st.write(f"Data file: **{csv_path}**")
-        if st.button("Run back‑test", key="run_backtest_csv"):
-            data_src = "CSV"
     with tab_ch:
         row1 = st.columns(3)
         exchange = row1[0].selectbox("Exchange", ch_exchs, key="ch_exch")
@@ -1579,8 +1578,6 @@ with st.sidebar:
         row2 = st.columns(2)
         start_ch = row2[0].date_input("Date from", start_ch, key="ch_start")
         end_ch = row2[1].date_input("Date to", end_ch, key="ch_end")
-        if st.button("Run back‑test", key="run_backtest_ch"):
-            data_src = "ClickHouse"
     st.subheader("Parameters")
     params: Dict[str, Any] = {}
     for field, ann in info.cfg_cls.__annotations__.items():
@@ -1614,49 +1611,51 @@ with st.sidebar:
     ACCENT, NEG = ("#10B981", "#EF4444") if theme == "Light" else ("#22D3EE", "#F43F5E")
 
     st.markdown("---")
-    if data_src == "CSV":
-        data_source = "CSV"
-        data_spec = csv_path
-        start_dt = pd.to_datetime(start_csv, utc=True)
-        end_dt = pd.to_datetime(end_csv, utc=True) + pd.Timedelta(days=1)
-    elif data_src == "ClickHouse":
-        data_source = "ClickHouse"
-        data_spec = {
-            "exchange": exchange,
-            "symbol": symbol,
-            "timeframe": (tf_ch[:-3] + "m") if tf_ch.endswith("min") else tf_ch,
-            "start": datetime.combine(start_ch, datetime.min.time()),
-            "end": datetime.combine(end_ch, datetime.min.time()),
-        }
-        start_dt = datetime.combine(start_ch, datetime.min.time())
-        end_dt = datetime.combine(end_ch, datetime.min.time())
+    run_bt = st.button("Run back‑test", key="run_backtest")
 
-if data_src:
-    with st.spinner("Running back‑test… please wait"):
-        connector = DataConnector()
-        data_df = connector.load(data_source, data_spec, start=start_dt, end=end_dt)
+    if run_bt:
+        if data_src == "CSV":
+            data_source = "CSV"
+            data_spec = csv_path
+            start_dt = pd.to_datetime(start_csv, utc=True)
+            end_dt = pd.to_datetime(end_csv, utc=True) + pd.Timedelta(days=1)
+        else:
+            data_source = "ClickHouse"
+            data_spec = {
+                "exchange": exchange,
+                "symbol": symbol,
+                "timeframe": (tf_ch[:-3] + "m") if tf_ch.endswith("min") else tf_ch,
+                "start": datetime.combine(start_ch, datetime.min.time()),
+                "end": datetime.combine(end_ch, datetime.min.time()),
+            }
+            start_dt = datetime.combine(start_ch, datetime.min.time())
+            end_dt = datetime.combine(end_ch, datetime.min.time())
 
-        if data_df.empty:
-            st.error("No data found for the selected date range.")
-            st.stop()
+        with st.spinner("Running back‑test… please wait"):
+            connector = DataConnector()
+            data_df = connector.load(data_source, data_spec, start=start_dt, end=end_dt)
 
-        log_stream = io.StringIO()
-        with redirect_stdout(log_stream), redirect_stderr(log_stream):
-            try:
-                result = run_backtest(
-                    info.strategy_cls,
-                    info.cfg_cls,
-                    params,
-                    data_df,
-                    actor_cls=DashboardPublisher,  # only if supported
-                )
-            except TypeError:  # actor_cls not accepted or other init error
-                result = run_backtest(
-                    info.strategy_cls,
-                    info.cfg_cls,
-                    params,
-                    data_df,
-                    actor_cls=DashboardPublisher,
-                )
-        log_text = log_stream.getvalue()
-    draw_dashboard(result, log_text, TPL, ACCENT, NEG)
+            if data_df.empty:
+                st.error("No data found for the selected date range.")
+                st.stop()
+
+            log_stream = io.StringIO()
+            with redirect_stdout(log_stream), redirect_stderr(log_stream):
+                try:
+                    result = run_backtest(
+                        info.strategy_cls,
+                        info.cfg_cls,
+                        params,
+                        data_df,
+                        actor_cls=DashboardPublisher,  # only if supported
+                    )
+                except TypeError:  # actor_cls not accepted or other init error
+                    result = run_backtest(
+                        info.strategy_cls,
+                        info.cfg_cls,
+                        params,
+                        data_df,
+                        actor_cls=DashboardPublisher,
+                    )
+            log_text = log_stream.getvalue()
+        draw_dashboard(result, log_text, TPL, ACCENT, NEG)
