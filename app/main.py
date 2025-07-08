@@ -1525,9 +1525,7 @@ with st.sidebar:
         end_csv = datetime.now(timezone.utc).date()
     start_ch = start_csv
     end_ch = end_csv
-    tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"])
-    run_bt_csv = False
-    run_bt_ch = False
+    tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"], key="data_src_tab")
     with tab_csv:
         row1 = st.columns(3)
         exchange_csv = csv_exchs[0] if csv_exchs else ""
@@ -1569,7 +1567,6 @@ with st.sidebar:
         else:
             csv_path = ""
         st.write(f"Data file: **{csv_path}**")
-        run_bt_csv = st.button("Run back‑test", key="run_backtest_csv")
     with tab_ch:
         row1 = st.columns(3)
         exchange = row1[0].selectbox("Exchange", ch_exchs, key="ch_exch")
@@ -1578,7 +1575,6 @@ with st.sidebar:
         row2 = st.columns(2)
         start_ch = row2[0].date_input("Date from", start_ch, key="ch_start")
         end_ch = row2[1].date_input("Date to", end_ch, key="ch_end")
-        run_bt_ch = st.button("Run back‑test", key="run_backtest_ch")
     st.subheader("Parameters")
     params: Dict[str, Any] = {}
     for field, ann in info.cfg_cls.__annotations__.items():
@@ -1612,13 +1608,14 @@ with st.sidebar:
     ACCENT, NEG = ("#10B981", "#EF4444") if theme == "Light" else ("#22D3EE", "#F43F5E")
 
     st.markdown("---")
-    run_bt = run_bt_csv or run_bt_ch
-    if run_bt_csv:
+    run_bt = st.button("Run back‑test", key="run_backtest")
+    selected_tab = st.session_state.get("data_src_tab", 0)
+    if selected_tab == 0:
         data_source = "CSV"
         data_spec = csv_path
         start_dt = pd.to_datetime(start_csv, utc=True)
         end_dt = pd.to_datetime(end_csv, utc=True) + pd.Timedelta(days=1)
-    elif run_bt_ch:
+    else:
         data_source = "ClickHouse"
         data_spec = {
             "exchange": exchange,
@@ -1629,8 +1626,6 @@ with st.sidebar:
         }
         start_dt = datetime.combine(start_ch, datetime.min.time())
         end_dt = datetime.combine(end_ch, datetime.min.time())
-    else:
-        data_source = None
 
     if run_bt and data_source:
         with st.spinner("Running back‑test… please wait"):
