@@ -10,3 +10,4 @@ plotly
 nautilus_trader
 clickhouse-driver
 streamlit-lightweight-charts-v5>=0.1.7
+extra-streamlit-components

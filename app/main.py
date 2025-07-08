@@ -25,6 +25,10 @@ try:
     from lightweight_charts_v5 import lightweight_charts_v5_component as lwc
 except ImportError:
     lwc = None
+try:
+    import extra_streamlit_components as stx
+except ImportError:
+    stx = None
 
 # ────────────────────────────── local code ───────────────────────────────────
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
@@ -1533,9 +1537,26 @@ with st.sidebar:
         end_csv = datetime.now(timezone.utc).date()
     start_ch = start_csv
     end_ch = end_csv
-    tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"])
 
-    with tab_csv:
+    if "data_tab" not in st.session_state:
+        st.session_state["data_tab"] = "csv"
+
+    if stx:
+        data_tabs = [
+            stx.TabBarItemData(id="csv", title="CSV"),
+            stx.TabBarItemData(id="ch", title="ClickHouse"),
+        ]
+        chosen_id = stx.tab_bar(
+            data=data_tabs,
+            default=st.session_state["data_tab"],
+            return_style="title",
+        )
+        st.session_state["data_tab"] = chosen_id
+    else:
+        st.warning("extra-streamlit-components not installed")
+        chosen_id = st.session_state["data_tab"]
+
+    if chosen_id == "csv":
         row1 = st.columns(3)
         exchange_csv = csv_exchs[0] if csv_exchs else ""
         symbol_csv = csv_syms[0] if csv_syms else ""
@@ -1576,7 +1597,7 @@ with st.sidebar:
         else:
             csv_path = ""
         st.write(f"Data file: **{csv_path}**")
-    with tab_ch:
+    else:
         row1 = st.columns(3)
         exchange = row1[0].selectbox("Exchange", ch_exchs, key="ch_exch")
         symbol = row1[1].text_input("Symbol", "BTCUSDT", key="ch_sym")
@@ -1614,8 +1635,7 @@ with st.sidebar:
 
     st.markdown("---")
 
-    run_csv = st.button("Run back‑test (CSV)", key="run_csv")
-    run_ch = st.button("Run back‑test (ClickHouse)", key="run_ch")
+    run_bt = st.button("Run back‑test", key="run_bt")
 
 # end sidebar ---------------------------------------------------------------
 
@@ -1627,6 +1647,9 @@ data_source: str
 data_spec: Any
 start_dt: datetime
 end_dt: datetime
+
+run_csv = run_bt and st.session_state.get("data_tab") == "csv"
+run_ch = run_bt and st.session_state.get("data_tab") == "ch"
 
 if run_csv:
     data_source = "CSV"
@@ -1645,7 +1668,7 @@ elif run_ch:
     start_dt = datetime.combine(start_ch, datetime.min.time())
     end_dt = datetime.combine(end_ch, datetime.min.time())
 
-if run_csv or run_ch:
+if run_bt:
     with st.spinner("Running back‑test… please wait"):
         connector = DataConnector()
         data_df = connector.load(data_source, data_spec, start=start_dt, end=end_dt)
