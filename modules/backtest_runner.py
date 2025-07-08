@@ -349,6 +349,52 @@ def rebuild_equity_curve(
     return equity
 
 
+def _dd_periods(series: pd.Series) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
+    """Return start/end indices for all drawdown periods."""
+    if series.empty:
+        return []
+    peak = series.iloc[0]
+    start = None
+    periods: list[tuple[pd.Timestamp, pd.Timestamp]] = []
+    for ts, val in series.items():
+        if val < peak:
+            if start is None:
+                start = ts
+        else:
+            if start is not None:
+                periods.append((start, ts))
+                start = None
+            peak = val
+    if start is not None:
+        periods.append((start, series.index[-1]))
+    return periods
+
+
+def _longest_dd_days(series: pd.Series) -> float:
+    if series.empty:
+        return np.nan
+    peak_idx = series.index[0]
+    peak_val = series.iloc[0]
+    longest = 0
+    for idx, val in series.items():
+        if val >= peak_val:
+            longest = max(longest, (idx - peak_idx).days)
+            peak_idx = idx
+            peak_val = val
+    longest = max(longest, (series.index[-1] - peak_idx).days)
+    return float(longest)
+
+
+def _avg_dd_days(series: pd.Series) -> float:
+    durs = [(e - s).days for s, e in _dd_periods(series)]
+    return float(np.mean(durs)) if durs else np.nan
+
+
+def _total_dd_days(series: pd.Series) -> float:
+    durs = [(e - s).days for s, e in _dd_periods(series)]
+    return float(np.sum(durs)) if durs else np.nan
+
+
 def run_backtest(
     strat_cls: Type[Strategy],
     cfg_cls: Type[StrategyConfig],
@@ -623,6 +669,11 @@ def run_backtest(
                 )
                 # Получаем кривую эквити и статистику из анализатора
                 equity_df = analyzer.equity_curve().to_frame(name="equity")
+                if not equity_df.empty:
+                    equity_df.index = pd.to_datetime(equity_df.index)
+                    if getattr(equity_df.index, "tz", None) is not None:
+                        equity_df.index = equity_df.index.tz_convert(None)
+                    equity_df.sort_index(inplace=True)
                 ret_stats = analyzer.get_performance_stats_returns()
                 pnl_stats = analyzer.get_performance_stats_pnls()
                 gen_stats = analyzer.get_performance_stats_general()
@@ -647,6 +698,11 @@ def run_backtest(
                     pass
                 equity_series = rebuild_equity_curve(price_df.index, trades_df, start_balance)
                 equity_df = equity_series.to_frame(name="equity")
+                if not equity_df.empty:
+                    equity_df.index = pd.to_datetime(equity_df.index)
+                    if getattr(equity_df.index, "tz", None) is not None:
+                        equity_df.index = equity_df.index.tz_convert(None)
+                    equity_df.sort_index(inplace=True)
                 if not equity_df.empty:
                     roll_max = equity_df.equity.cummax()
                     max_dd = (roll_max - equity_df.equity).max()
@@ -674,6 +730,32 @@ def run_backtest(
         if losses != 0:
             profit_factor = gains / abs(losses)
 
+    # ── Additional risk metrics --------------------------------------------
+    sortino = np.nan
+    pnl_dd_ratio = np.nan
+    calmar = np.nan
+    romad = np.nan
+    longest_dd_len = np.nan
+    avg_dd_len = np.nan
+    total_dd_len = np.nan
+    if not equity_df.empty:
+        returns = equity_df["equity"].pct_change().dropna()
+        neg_returns = returns[returns < 0]
+        if not neg_returns.empty and neg_returns.std(ddof=0) > 0:
+            sortino = (returns.mean() / neg_returns.std(ddof=0)) * np.sqrt(252)
+        max_dd_pct = ((equity_df.equity.cummax() - equity_df.equity) / equity_df.equity.cummax()).max()
+        total_return = (equity_df.equity.iloc[-1] - equity_df.equity.iloc[0]) / equity_df.equity.iloc[0]
+        period_seconds = (equity_df.index[-1] - equity_df.index[0]).total_seconds()
+        annual_return = (1 + total_return) ** (365 * 24 * 3600 / period_seconds) - 1 if period_seconds > 0 else np.nan
+        if max_dd_pct not in (0, np.nan) and not np.isnan(total_return):
+            pnl_dd_ratio = (total_return * 100) / (abs(max_dd_pct) * 100)
+            romad = total_return / abs(max_dd_pct)
+        if max_dd_pct not in (0, np.nan) and not np.isnan(annual_return):
+            calmar = annual_return / abs(max_dd_pct)
+        longest_dd_len = _longest_dd_days(equity_df["equity"])
+        avg_dd_len = _avg_dd_days(equity_df["equity"])
+        total_dd_len = _total_dd_days(equity_df["equity"])
+
     metrics = {
         "total_profit": round(total_profit, 2),
         "max_drawdown": round(float(max_dd), 2),  # max_dd уже float или 0.0
@@ -682,6 +764,13 @@ def run_backtest(
         "profit_factor": round(float(profit_factor), 2)
         if not np.isnan(profit_factor)
         else np.nan,
+        "profit_dd": round(float(pnl_dd_ratio), 2) if not np.isnan(pnl_dd_ratio) else np.nan,
+        "calmar": round(float(calmar), 2) if not np.isnan(calmar) else np.nan,
+        "romad": round(float(romad), 2) if not np.isnan(romad) else np.nan,
+        "sortino": round(float(sortino), 2) if not np.isnan(sortino) else np.nan,
+        "longest_dd_days": round(float(longest_dd_len), 2) if not np.isnan(longest_dd_len) else np.nan,
+        "avg_dd_days": round(float(avg_dd_len), 2) if not np.isnan(avg_dd_len) else np.nan,
+        "total_dd_days": round(float(total_dd_len), 2) if not np.isnan(total_dd_len) else np.nan,
     }
 
     # Получение комиссий
