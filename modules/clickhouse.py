@@ -20,12 +20,16 @@ from __future__ import annotations
 import os
 import re
 import sys
+
+from dotenv import load_dotenv
 from datetime import datetime, timezone, timedelta
 from types import ModuleType
 from typing import Dict, Optional, Tuple
 
 import pandas as pd
 from clickhouse_driver import Client
+
+load_dotenv()
 
 # ── Nautilus Trader ─────────────────────────────────────────────── #
 from nautilus_trader.model import InstrumentId, Symbol, Venue
