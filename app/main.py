@@ -63,6 +63,16 @@ st.markdown(
     [data-testid="stSidebar"] [data-testid="stTabs"] {
         margin-top:0;
     }
+    /* make sidebar buttons and tab bar more compact */
+    div[data-testid="stSidebar"] button {
+        padding:0.25rem 0.75rem;
+        font-size:0.85rem;
+    }
+    div[data-testid="stSidebar"] .stx-tab-bar button {
+        padding-top:0.25rem;
+        padding-bottom:0.25rem;
+        margin-right:0.25rem;
+    }
     </style>
     """,
     unsafe_allow_html=True,
