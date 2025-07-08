@@ -1613,12 +1613,14 @@ with st.sidebar:
             params[field] = st.text_input(label, value=str(default or ""))
 
     st.markdown("---")
+
+    # Fixed color scheme
+    TPL = st.session_state["bt_tpl"]
+    ACCENT = st.session_state["bt_accent"]
+    NEG = st.session_state["bt_neg"]
+
     run_csv = tab_csv.button("Run back‑test", key="run_csv")
     run_ch = tab_ch.button("Run back‑test", key="run_ch")
-
-    theme = st.selectbox("Theme", ["Light", "Dark"], index=0)
-    TPL = "plotly_dark" if theme == "Dark" else "plotly_white"
-    ACCENT, NEG = ("#10B981", "#EF4444") if theme == "Light" else ("#22D3EE", "#F43F5E")
 
 # end sidebar ---------------------------------------------------------------
 
