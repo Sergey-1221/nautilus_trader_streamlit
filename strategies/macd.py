@@ -17,7 +17,10 @@ class MACDConfig(StrategyConfig):
     bar_type: BarType
     fast_period: int = 12
     slow_period: int = 26
-    trade_size: int = 1_000_000
+    # Original examples used very large quantities which are unsuitable
+    # for the modest balances provided by the default backtest engine.
+    # Set a realistic size of 1 unit by default.
+    trade_size: int = 1
     entry_threshold: float = 0.00010
 
 

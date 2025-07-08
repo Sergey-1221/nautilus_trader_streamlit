@@ -8,3 +8,7 @@ pandas
 numpy
 plotly
 nautilus_trader
+clickhouse-driver
+python-dotenv
+streamlit-lightweight-charts-v5>=0.1.7
+extra-streamlit-components
