@@ -1525,8 +1525,8 @@ with st.sidebar:
         end_csv = datetime.now(timezone.utc).date()
     start_ch = start_csv
     end_ch = end_csv
-    tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"], key="data_src_tab")
-    with tab_csv:
+    data_src = st.radio("Data source", ["CSV", "ClickHouse"], horizontal=True, key="data_src_tab")
+    if data_src == "CSV":
         row1 = st.columns(3)
         exchange_csv = csv_exchs[0] if csv_exchs else ""
         symbol_csv = csv_syms[0] if csv_syms else ""
@@ -1567,7 +1567,7 @@ with st.sidebar:
         else:
             csv_path = ""
         st.write(f"Data file: **{csv_path}**")
-    with tab_ch:
+    else:
         row1 = st.columns(3)
         exchange = row1[0].selectbox("Exchange", ch_exchs, key="ch_exch")
         symbol = row1[1].text_input("Symbol", "BTCUSDT", key="ch_sym")
@@ -1609,8 +1609,7 @@ with st.sidebar:
 
     st.markdown("---")
     run_bt = st.button("Run back‑test", key="run_backtest")
-    selected_tab = st.session_state.get("data_src_tab", 0)
-    if selected_tab == 0:
+    if data_src == "CSV":
         data_source = "CSV"
         data_spec = csv_path
         start_dt = pd.to_datetime(start_csv, utc=True)
