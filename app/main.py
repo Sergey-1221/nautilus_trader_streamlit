@@ -1549,7 +1549,6 @@ with st.sidebar:
         chosen_id = stx.tab_bar(
             data=data_tabs,
             default=st.session_state["data_tab"],
-            return_style="title",
         )
         st.session_state["data_tab"] = chosen_id
     else:
