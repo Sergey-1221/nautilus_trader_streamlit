@@ -1525,8 +1525,12 @@ with st.sidebar:
         end_csv = datetime.now(timezone.utc).date()
     start_ch = start_csv
     end_ch = end_csv
-    data_src = st.radio("Data source", ["CSV", "ClickHouse"], horizontal=True,
-                        key="data_src_tab")
+    data_src = st.selectbox(
+        "Data source",
+        ["CSV", "ClickHouse"],
+        index=0,
+        key="data_src_select",
+    )
     tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"])
 
     with tab_csv:
