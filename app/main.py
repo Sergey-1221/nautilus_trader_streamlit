@@ -1612,15 +1612,15 @@ with st.sidebar:
         else:
             params[field] = st.text_input(label, value=str(default or ""))
 
+    run_csv = tab_csv.button("Run back‑test", key="run_csv")
+    run_ch = tab_ch.button("Run back‑test", key="run_ch")
+
     st.markdown("---")
 
     # Fixed color scheme
     TPL = st.session_state["bt_tpl"]
     ACCENT = st.session_state["bt_accent"]
     NEG = st.session_state["bt_neg"]
-
-    run_csv = tab_csv.button("Run back‑test", key="run_csv")
-    run_ch = tab_ch.button("Run back‑test", key="run_ch")
 
 # end sidebar ---------------------------------------------------------------
 
