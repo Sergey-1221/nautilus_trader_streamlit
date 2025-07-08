@@ -1239,7 +1239,15 @@ def draw_dashboard(
                     cal["Day"] = cal.index.weekday
                     cal["Year"] = cal.index.year
                     for year in cal["Year"].unique():
-                        piv = cal[cal["Year"] == year].pivot(index="Day", columns="Week", values="ret")
+                        piv = (
+                            cal[cal["Year"] == year]
+                            .pivot_table(
+                                index="Day",
+                                columns="Week",
+                                values="ret",
+                                aggfunc="sum",
+                            )
+                        )
                         cfig = px.imshow(
                             piv,
                             color_continuous_scale="RdYlGn",
