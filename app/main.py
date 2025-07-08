@@ -1525,12 +1525,6 @@ with st.sidebar:
         end_csv = datetime.now(timezone.utc).date()
     start_ch = start_csv
     end_ch = end_csv
-    data_src = st.selectbox(
-        "Data source",
-        ["CSV", "ClickHouse"],
-        index=0,
-        key="data_src_select",
-    )
     tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"])
 
     with tab_csv:
@@ -1615,26 +1609,32 @@ with st.sidebar:
     ACCENT, NEG = ("#10B981", "#EF4444") if theme == "Light" else ("#22D3EE", "#F43F5E")
 
     st.markdown("---")
-    run_bt = st.button("Run back‑test", key="run_backtest")
+    run_csv = tab_csv.button("Run back‑test", key="run_csv")
+    run_ch = tab_ch.button("Run back‑test", key="run_ch")
 
-    if run_bt:
-        if data_src == "CSV":
-            data_source = "CSV"
-            data_spec = csv_path
-            start_dt = pd.to_datetime(start_csv, utc=True)
-            end_dt = pd.to_datetime(end_csv, utc=True) + pd.Timedelta(days=1)
-        else:
-            data_source = "ClickHouse"
-            data_spec = {
-                "exchange": exchange,
-                "symbol": symbol,
-                "timeframe": (tf_ch[:-3] + "m") if tf_ch.endswith("min") else tf_ch,
-                "start": datetime.combine(start_ch, datetime.min.time()),
-                "end": datetime.combine(end_ch, datetime.min.time()),
-            }
-            start_dt = datetime.combine(start_ch, datetime.min.time())
-            end_dt = datetime.combine(end_ch, datetime.min.time())
+    data_source: str
+    data_spec: Any
+    start_dt: datetime
+    end_dt: datetime
 
+    if run_csv:
+        data_source = "CSV"
+        data_spec = csv_path
+        start_dt = pd.to_datetime(start_csv, utc=True)
+        end_dt = pd.to_datetime(end_csv, utc=True) + pd.Timedelta(days=1)
+    elif run_ch:
+        data_source = "ClickHouse"
+        data_spec = {
+            "exchange": exchange,
+            "symbol": symbol,
+            "timeframe": (tf_ch[:-3] + "m") if tf_ch.endswith("min") else tf_ch,
+            "start": datetime.combine(start_ch, datetime.min.time()),
+            "end": datetime.combine(end_ch, datetime.min.time()),
+        }
+        start_dt = datetime.combine(start_ch, datetime.min.time())
+        end_dt = datetime.combine(end_ch, datetime.min.time())
+
+    if run_csv or run_ch:
         with st.spinner("Running back‑test… please wait"):
             connector = DataConnector()
             data_df = connector.load(data_source, data_spec, start=start_dt, end=end_dt)
