@@ -1525,8 +1525,9 @@ with st.sidebar:
         end_csv = datetime.now(timezone.utc).date()
     start_ch = start_csv
     end_ch = end_csv
-    data_src = st.radio("Data source", ["CSV", "ClickHouse"], horizontal=True, key="data_src_tab")
     tab_csv, tab_ch = st.tabs(["CSV", "ClickHouse"])
+    run_bt_csv = False
+    run_bt_ch = False
     with tab_csv:
         row1 = st.columns(3)
         exchange_csv = csv_exchs[0] if csv_exchs else ""
@@ -1568,6 +1569,7 @@ with st.sidebar:
         else:
             csv_path = ""
         st.write(f"Data file: **{csv_path}**")
+        run_bt_csv = st.button("Run back‑test", key="run_backtest_csv")
     with tab_ch:
         row1 = st.columns(3)
         exchange = row1[0].selectbox("Exchange", ch_exchs, key="ch_exch")
@@ -1576,6 +1578,7 @@ with st.sidebar:
         row2 = st.columns(2)
         start_ch = row2[0].date_input("Date from", start_ch, key="ch_start")
         end_ch = row2[1].date_input("Date to", end_ch, key="ch_end")
+        run_bt_ch = st.button("Run back‑test", key="run_backtest_ch")
     st.subheader("Parameters")
     params: Dict[str, Any] = {}
     for field, ann in info.cfg_cls.__annotations__.items():
@@ -1609,13 +1612,13 @@ with st.sidebar:
     ACCENT, NEG = ("#10B981", "#EF4444") if theme == "Light" else ("#22D3EE", "#F43F5E")
 
     st.markdown("---")
-    run_bt = st.button("Run back‑test", key="run_backtest")
-    if data_src == "CSV":
+    run_bt = run_bt_csv or run_bt_ch
+    if run_bt_csv:
         data_source = "CSV"
         data_spec = csv_path
         start_dt = pd.to_datetime(start_csv, utc=True)
         end_dt = pd.to_datetime(end_csv, utc=True) + pd.Timedelta(days=1)
-    else:
+    elif run_bt_ch:
         data_source = "ClickHouse"
         data_spec = {
             "exchange": exchange,
@@ -1626,32 +1629,35 @@ with st.sidebar:
         }
         start_dt = datetime.combine(start_ch, datetime.min.time())
         end_dt = datetime.combine(end_ch, datetime.min.time())
-    with st.spinner("Running back‑test… please wait"):
-        connector = DataConnector()
-        data_df = connector.load(data_source, data_spec, start=start_dt, end=end_dt)
+    else:
+        data_source = None
 
-        if data_df.empty:
-            st.error("No data found for the selected date range.")
-            st.stop()
+    if run_bt and data_source:
+        with st.spinner("Running back‑test… please wait"):
+            connector = DataConnector()
+            data_df = connector.load(data_source, data_spec, start=start_dt, end=end_dt)
 
-        log_stream = io.StringIO()
-        with redirect_stdout(log_stream), redirect_stderr(log_stream):
-            try:
-                result = run_backtest(
-                    info.strategy_cls,
-                    info.cfg_cls,
-                    params,
-                    data_df,
-                    actor_cls=DashboardPublisher,  # only if supported
-                )
-            except TypeError:  # actor_cls not accepted or other init error
-                result = run_backtest(
-                    info.strategy_cls,
-                    info.cfg_cls,
-                    params,
-                    data_df,
-                    actor_cls=DashboardPublisher,
-                )
-        log_text = log_stream.getvalue()
+            if data_df.empty:
+                st.error("No data found for the selected date range.")
+                st.stop()
 
-draw_dashboard(result, log_text, TPL, ACCENT, NEG)
+            log_stream = io.StringIO()
+            with redirect_stdout(log_stream), redirect_stderr(log_stream):
+                try:
+                    result = run_backtest(
+                        info.strategy_cls,
+                        info.cfg_cls,
+                        params,
+                        data_df,
+                        actor_cls=DashboardPublisher,  # only if supported
+                    )
+                except TypeError:  # actor_cls not accepted or other init error
+                    result = run_backtest(
+                        info.strategy_cls,
+                        info.cfg_cls,
+                        params,
+                        data_df,
+                        actor_cls=DashboardPublisher,
+                    )
+            log_text = log_stream.getvalue()
+        draw_dashboard(result, log_text, TPL, ACCENT, NEG)
