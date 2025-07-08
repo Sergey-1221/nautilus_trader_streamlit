@@ -1612,54 +1612,56 @@ with st.sidebar:
     run_csv = tab_csv.button("Run back‑test", key="run_csv")
     run_ch = tab_ch.button("Run back‑test", key="run_ch")
 
-    data_source: str
-    data_spec: Any
-    start_dt: datetime
-    end_dt: datetime
+# end sidebar ---------------------------------------------------------------
 
-    if run_csv:
-        data_source = "CSV"
-        data_spec = csv_path
-        start_dt = pd.to_datetime(start_csv, utc=True)
-        end_dt = pd.to_datetime(end_csv, utc=True) + pd.Timedelta(days=1)
-    elif run_ch:
-        data_source = "ClickHouse"
-        data_spec = {
-            "exchange": exchange,
-            "symbol": symbol,
-            "timeframe": (tf_ch[:-3] + "m") if tf_ch.endswith("min") else tf_ch,
-            "start": datetime.combine(start_ch, datetime.min.time()),
-            "end": datetime.combine(end_ch, datetime.min.time()),
-        }
-        start_dt = datetime.combine(start_ch, datetime.min.time())
-        end_dt = datetime.combine(end_ch, datetime.min.time())
+data_source: str
+data_spec: Any
+start_dt: datetime
+end_dt: datetime
 
-    if run_csv or run_ch:
-        with st.spinner("Running back‑test… please wait"):
-            connector = DataConnector()
-            data_df = connector.load(data_source, data_spec, start=start_dt, end=end_dt)
+if run_csv:
+    data_source = "CSV"
+    data_spec = csv_path
+    start_dt = pd.to_datetime(start_csv, utc=True)
+    end_dt = pd.to_datetime(end_csv, utc=True) + pd.Timedelta(days=1)
+elif run_ch:
+    data_source = "ClickHouse"
+    data_spec = {
+        "exchange": exchange,
+        "symbol": symbol,
+        "timeframe": (tf_ch[:-3] + "m") if tf_ch.endswith("min") else tf_ch,
+        "start": datetime.combine(start_ch, datetime.min.time()),
+        "end": datetime.combine(end_ch, datetime.min.time()),
+    }
+    start_dt = datetime.combine(start_ch, datetime.min.time())
+    end_dt = datetime.combine(end_ch, datetime.min.time())
 
-            if data_df.empty:
-                st.error("No data found for the selected date range.")
-                st.stop()
+if run_csv or run_ch:
+    with st.spinner("Running back‑test… please wait"):
+        connector = DataConnector()
+        data_df = connector.load(data_source, data_spec, start=start_dt, end=end_dt)
 
-            log_stream = io.StringIO()
-            with redirect_stdout(log_stream), redirect_stderr(log_stream):
-                try:
-                    result = run_backtest(
-                        info.strategy_cls,
-                        info.cfg_cls,
-                        params,
-                        data_df,
-                        actor_cls=DashboardPublisher,  # only if supported
-                    )
-                except TypeError:  # actor_cls not accepted or other init error
-                    result = run_backtest(
-                        info.strategy_cls,
-                        info.cfg_cls,
-                        params,
-                        data_df,
-                        actor_cls=DashboardPublisher,
-                    )
-            log_text = log_stream.getvalue()
-        draw_dashboard(result, log_text, TPL, ACCENT, NEG)
+        if data_df.empty:
+            st.error("No data found for the selected date range.")
+            st.stop()
+
+        log_stream = io.StringIO()
+        with redirect_stdout(log_stream), redirect_stderr(log_stream):
+            try:
+                result = run_backtest(
+                    info.strategy_cls,
+                    info.cfg_cls,
+                    params,
+                    data_df,
+                    actor_cls=DashboardPublisher,  # only if supported
+                )
+            except TypeError:  # actor_cls not accepted or other init error
+                result = run_backtest(
+                    info.strategy_cls,
+                    info.cfg_cls,
+                    params,
+                    data_df,
+                    actor_cls=DashboardPublisher,
+                )
+        log_text = log_stream.getvalue()
+    draw_dashboard(result, log_text, TPL, ACCENT, NEG)
