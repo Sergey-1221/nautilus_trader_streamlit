@@ -387,12 +387,16 @@ def _longest_dd_days(series: pd.Series) -> float:
 
 def _avg_dd_days(series: pd.Series) -> float:
     durs = [(e - s).days for s, e in _dd_periods(series)]
-    return float(np.mean(durs)) if durs else np.nan
+    if not durs:
+        return 0.0
+    return float(np.mean(durs))
 
 
 def _total_dd_days(series: pd.Series) -> float:
     durs = [(e - s).days for s, e in _dd_periods(series)]
-    return float(np.sum(durs)) if durs else np.nan
+    if not durs:
+        return 0.0
+    return float(np.sum(durs))
 
 
 def run_backtest(
@@ -727,7 +731,9 @@ def run_backtest(
     if not trades_df.empty:
         gains = trades_df.loc[trades_df["profit"] > 0, "profit"].sum()
         losses = trades_df.loc[trades_df["profit"] < 0, "profit"].sum()
-        if losses != 0:
+        if losses == 0:
+            profit_factor = np.inf if gains > 0 else np.nan
+        else:
             profit_factor = gains / abs(losses)
 
     # ── Additional risk metrics --------------------------------------------
@@ -747,11 +753,18 @@ def run_backtest(
         total_return = (equity_df.equity.iloc[-1] - equity_df.equity.iloc[0]) / equity_df.equity.iloc[0]
         period_seconds = (equity_df.index[-1] - equity_df.index[0]).total_seconds()
         annual_return = (1 + total_return) ** (365 * 24 * 3600 / period_seconds) - 1 if period_seconds > 0 else np.nan
-        if max_dd_pct not in (0, np.nan) and not np.isnan(total_return):
-            pnl_dd_ratio = (total_return * 100) / (abs(max_dd_pct) * 100)
-            romad = total_return / abs(max_dd_pct)
-        if max_dd_pct not in (0, np.nan) and not np.isnan(annual_return):
-            calmar = annual_return / abs(max_dd_pct)
+        if not np.isnan(total_return):
+            if max_dd_pct == 0:
+                pnl_dd_ratio = np.inf if total_return > 0 else np.nan
+                romad = np.inf if total_return > 0 else np.nan
+            elif not np.isnan(max_dd_pct):
+                pnl_dd_ratio = (total_return * 100) / (abs(max_dd_pct) * 100)
+                romad = total_return / abs(max_dd_pct)
+        if not np.isnan(annual_return):
+            if max_dd_pct == 0:
+                calmar = np.inf if annual_return > 0 else np.nan
+            elif not np.isnan(max_dd_pct):
+                calmar = annual_return / abs(max_dd_pct)
         longest_dd_len = _longest_dd_days(equity_df["equity"])
         avg_dd_len = _avg_dd_days(equity_df["equity"])
         total_dd_len = _total_dd_days(equity_df["equity"])
