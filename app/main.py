@@ -427,7 +427,7 @@ def draw_dashboard(
 
     # ╭──────────────────── 📄  RUN METADATA (collapsed) ──────────────────────╮
     with st.expander(
-        f"📄 Мetadata — ID: {run_meta['Run ID']}",
+        f"📄 Metadata — ID: {run_meta['Run ID']}",
         expanded=False,
     ):
         meta_cols = st.columns(3)
@@ -1109,7 +1109,7 @@ def draw_dashboard(
     # ③ Risk & Seasonality ----------------------------------------------------
     st.subheader("📊 Risk & Seasonality")
 
-    # окно скольжения ~6 месяцев или меньше, если данных мало
+    # rolling window ~6 months or less when data is limited
     roll = min(len(strategy_returns), 126) if not strategy_returns.empty else 1
 
     if strategy_returns.empty:
@@ -1333,7 +1333,7 @@ def draw_dashboard(
         )
 
         selected_sides = st.pills(
-            "Сторона сделки",
+            "Trade side",
             ["Long", "Short"],
             selection_mode="multi",
             default=["Long", "Short"],

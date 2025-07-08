@@ -1,21 +1,21 @@
 # csv_data.py
 # -*- coding: utf-8 -*-
 """
-csv_data – загрузка OHLC(V)-данных из CSV в pandas.DataFrame.
+csv_data — load OHLC(V) data from CSV into a pandas.DataFrame.
 
-• Принимает любой CSV-файл со свечами, если в нём есть столбцы
-  timestamp / time / date и open, high, low, close (volume — опционально).
-• Автоматически определяет единицы времени (s / ms / µs / ns).
-• Возвращает отсортированный DataFrame с DatetimeIndex (UTC).
+• Accepts any CSV file with candles as long as it has columns
+  timestamp / time / date and open, high, low, close (volume is optional).
+• Automatically determines the time units (s / ms / µs / ns).
+• Returns a sorted DataFrame with a DatetimeIndex (UTC).
 
-Тестовый запуск
---------------
-Просто выполните::
+Test run
+--------
+Simply execute::
 
     python csv_data.py
 
-По умолчанию будет загружен файл “BINANCE_BTCUSD, 15.csv”.
-Если нужен другой — измените константу `CSV_DEFAULT_PATH` ниже.
+By default the file "BINANCE_BTCUSD, 15.csv" will be loaded.
+If you need another one, change the `CSV_DEFAULT_PATH` constant below.
 """
 
 from __future__ import annotations
@@ -30,25 +30,25 @@ __all__: List[str] = ["load_ohlcv_csv"]
 
 _logger = logging.getLogger(__name__)
 
-# ────────────────────────────── путь CSV по умолчанию
+# ────────────────────────────── default CSV path
 CSV_DEFAULT_PATH = "BINANCE_BTCUSD, 15.csv"
 # ─────────────────────────────────────────────────────
 
 
 def load_ohlcv_csv(csv_path: str) -> pd.DataFrame:
     """
-    Читает CSV и отдаёт DataFrame с индексом-DatetimeIndex (UTC).
+    Read CSV and return a DataFrame with a DatetimeIndex (UTC).
 
     Parameters
     ----------
     csv_path : str
-        Путь к CSV-файлу.
+        Path to the CSV file.
 
     Returns
     -------
     pandas.DataFrame
-        Колонки: open, high, low, close, (volume).
-        Индекс: DatetimeIndex (UTC).
+        Columns: open, high, low, close, (volume).
+        Index: DatetimeIndex (UTC).
     """
     csv_file = Path(csv_path)
     if not csv_file.is_file():
@@ -56,7 +56,7 @@ def load_ohlcv_csv(csv_path: str) -> pd.DataFrame:
 
     df = pd.read_csv(csv_file, decimal=".")
 
-    # ── регистронезависимое сопоставление имён колонок
+    # ── case-insensitive matching of column names
     col_map = {c.lower(): c for c in df.columns}
 
     ts_col = next((col_map.get(k) for k in ("timestamp", "time", "date") if k in col_map), None)
@@ -73,11 +73,11 @@ def load_ohlcv_csv(csv_path: str) -> pd.DataFrame:
     if has_vol:
         target_cols.append(col_map["volume"])
 
-    # ── нормализованные имена
+    # ── normalized names
     df = df[target_cols]
     df.columns = ["timestamp"] + required + (["volume"] if has_vol else [])
 
-    # ── типы данных
+    # ── data types
     df[required] = df[required].astype("float64")
     if has_vol:
         df["volume"] = df["volume"].astype("float64")
@@ -105,7 +105,7 @@ def load_ohlcv_csv(csv_path: str) -> pd.DataFrame:
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Мини-тест при запуске «python csv_data.py»
+# Mini test when running "python csv_data.py"
 # ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     logging.basicConfig(

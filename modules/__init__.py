@@ -1,1 +1,1 @@
-# Пустой файл для обозначения модуля
+# Empty file to mark a module

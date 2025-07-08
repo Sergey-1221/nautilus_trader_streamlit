@@ -22,7 +22,7 @@ from nautilus_trader.model.enums import (
 from nautilus_trader.model.identifiers import Venue
 from nautilus_trader.model.objects import (
     Money,
-)  # Money импортируется, но используется as_decimal()
+)  # Money is imported but used as_decimal()
 from nautilus_trader.persistence.wranglers import BarDataWrangler
 from nautilus_trader.test_kit.providers import TestInstrumentProvider
 from nautilus_trader.trading.strategy import Strategy
@@ -39,28 +39,28 @@ def dataframe_to_bars(
     instrument_factory=TestInstrumentProvider.btcusdt_binance,
 ):
     """
-    Принимает DataFrame (как из load_ohlcv_csv) и возвращает
-    (instrument, bar_type, bars, df).
+    Accept a DataFrame (as from ``load_ohlcv_csv``) and return
+    ``(instrument, bar_type, bars, df)``.
 
-    *Интервал* выводится автоматически из разницы индексов.
+    *Interval* is inferred automatically from index differences.
     """
     if df.empty:
         raise ValueError("DataFrame is empty – nothing to convert.")
 
-    # ── определить интервал и Aggregation Unit ───────────────────────
+    # ── determine interval and Aggregation Unit ───────────────────────
     diffs = df.index.to_series().diff().dropna()
     if diffs.empty:
         interval, agg = 1, BarAggregation.MINUTE
     else:
         delta = diffs.mode()[0]
         secs = int(delta.total_seconds())
-        if secs % 86_400 == 0:  # дни
+        if secs % 86_400 == 0:  # days
             interval, agg = secs // 86_400, BarAggregation.DAY
-        elif secs % 3_600 == 0:  # часы
+        elif secs % 3_600 == 0:  # hours
             interval, agg = secs // 3_600, BarAggregation.HOUR
-        elif secs % 60 == 0:  # минуты
+        elif secs % 60 == 0:  # minutes
             interval, agg = secs // 60, BarAggregation.MINUTE
-        else:  # «нестандарт» – fallback к минутам
+        else:  # non-standard → fallback to minutes
             interval, agg = max(1, secs // 60), BarAggregation.MINUTE
 
     # ── Instrument & BarType ─────────────────────────────────────────
@@ -231,10 +231,10 @@ def _init_engine(instr, bars, balance: float = 10_000.0) -> BacktestEngine:
         Venue("BINANCE"),
         oms_type=OmsType.NETTING,
         account_type=AccountType.CASH,
-        # base_currency=None → мультивалютный счёт начиная с версии 1.171
+        # base_currency=None → multi-currency account since version 1.171
         starting_balances=[
             Money(Decimal(str(balance)), USDT),
-            # второй баланс в BTC (0 достаточно) даёт возможность шортить
+            # second balance in BTC (0 is enough) enables shorting
             Money(Decimal("0"), BTC),
         ],
         base_currency=None,
@@ -249,7 +249,7 @@ def _init_engine(instr, bars, balance: float = 10_000.0) -> BacktestEngine:
 # ────────────────────────────────────────────────────────────────
 
 
-# Эта функция build_engine_with_actor уже принимала actor_cls
+# This build_engine_with_actor function already accepted actor_cls
 def build_engine_with_actor(
     strat_cls: Type[Strategy],
     cfg_cls: Type[StrategyConfig],
@@ -269,7 +269,7 @@ def build_engine_with_actor(
     cfg_args.update(instrument_id=instr.id, bar_type=bar_type)
 
     engine.add_strategy(strat_cls(cfg_cls(**cfg_args)))
-    engine.add_actor(actor_cls())  # Добавление актора
+    engine.add_actor(actor_cls())  # Add actor
     engine.run()
     return engine
 
@@ -435,29 +435,29 @@ def run_backtest(
         engine.run()
     else:
         engine = reuse_engine
-        # Если движок переиспользуется, предполагается, что стратегия и актор уже добавлены.
-        # Если это не так, логика может потребоваться доработки в зависимости от сценария переиспользования.
-        # Для простоты, в этом блоке не добавляем актора/стратегию повторно.
+        # If the engine is reused it's assumed the strategy and actor are already added.
+        # Otherwise you may need to adjust logic depending on the reuse scenario.
+        # For simplicity we don't add the actor/strategy again here.
 
     # 2) Fills ➜ DataFrame (patched section)
-    # Используем generate_order_fills_report, как в исходном коде
+    # Use generate_order_fills_report as in the original code
     fills_raw = engine.trader.generate_order_fills_report()
 
     fills_df = _order_fills_to_dataframe(fills_raw)
 
     if fills_df.empty:
-        # Убедимся, что пустой DataFrame имеет ожидаемые колонки для последующей обработки
+        # Ensure the empty DataFrame has expected columns for further processing
         fills_df = pd.DataFrame(
             columns=["timestamp", "order_side", "price", "quantity", "order_id"]
         )
 
     # Timestamp normalisation
-    # Ищем любое поле, похожее на timestamp, и переименовываем его в 'timestamp'
+    # Look for any field resembling a timestamp and rename it to 'timestamp'
     timestamp_cols = [
         c for c in fills_df.columns if "ts_" in c or c in ("timestamp", "time", "date")
     ]
-    if not timestamp_cols:
-        # Если нет явных полей времени, попробуем использовать индекс, если он datetime
+        if not timestamp_cols:
+            # If no explicit time fields, try using the index if it's datetime
         if isinstance(fills_df.index, pd.DatetimeIndex):
             fills_df["timestamp"] = fills_df.index.to_series()
         else:
@@ -465,41 +465,41 @@ def run_backtest(
                 f"No timestamp field or DatetimeIndex found in fills columns: {fills_df.columns.tolist()}"
             )
     else:
-        # Используем первое найденное поле времени и переименовываем его
+        # Use the first found time field and rename it
         ts_col_to_use = timestamp_cols[0]
         if ts_col_to_use != "timestamp":
             fills_df.rename(columns={ts_col_to_use: "timestamp"}, inplace=True)
 
-    # Убедимся, что колонка 'timestamp' имеет тип datetime с UTC
+    # Ensure the 'timestamp' column is datetime with UTC
     fills_df["timestamp"] = pd.to_datetime(
         fills_df["timestamp"], utc=True, errors="coerce"
     )
     fills_df.dropna(
         subset=["timestamp"], inplace=True
-    )  # Удаляем строки с некорректным временем
-    fills_df.sort_values("timestamp", inplace=True)  # Сортируем по времени
+    )  # Remove rows with invalid time
+    fills_df.sort_values("timestamp", inplace=True)  # Sort by time
 
     # Ensure fields side / price / quantity exist and are correct types
-    # Используем .str.upper() для надежности, если side не является строкой
+    # Use .str.upper() for reliability if side is not a string
     if "order_side" not in fills_df.columns:
         side_key = next((c for c in ("side",) if c in fills_df.columns), None)
         if side_key:
             fills_df["order_side"] = fills_df[side_key].astype(str).str.upper()
         else:
-            # Если нет ни 'order_side', ни 'side', возможно, нужно пропустить этот шаг или выдать ошибку
+            # If neither 'order_side' nor 'side' exists, you might skip this step or raise an error
             _logger.warning("Could not find 'order_side' or 'side' column in fills_df.")
             fills_df["order_side"] = (
-                ""  # Добавляем пустую колонку, чтобы избежать KeyError
+                ""  # Add empty column to avoid KeyError
             )
 
-    # Поиск и нормализация колонки цены
+    # Search and normalize price column
     price_keys = (
         "price",
         "avg_px",
         "fill_px",
         "px",
         "last_px",
-    )  # Добавлен last_px из контекста
+    )  # last_px added from context
     price_key = next((c for c in price_keys if c in fills_df.columns), None)
     if price_key is None:
         raise KeyError(
@@ -507,13 +507,13 @@ def run_backtest(
         )
     fills_df["price"] = pd.to_numeric(fills_df[price_key], errors="coerce")
 
-    # Поиск и нормализация колонки количества
+    # Search and normalize quantity column
     qty_keys = (
         "quantity",
         "qty",
         "filled_qty",
         "last_qty",
-    )  # Добавлен last_qty из контекста
+    )  # last_qty added from context
     qty_key = next((c for c in qty_keys if c in fills_df.columns), None)
     if qty_key is None:
         raise KeyError(
@@ -521,7 +521,7 @@ def run_backtest(
         )
     fills_df["quantity"] = pd.to_numeric(fills_df[qty_key], errors="coerce")
 
-    # Заполнение пропущенных значений в критически важных колонках
+    # Fill missing values in critical columns
     fills_df.fillna({"order_side": "", "price": 0.0, "quantity": 0.0}, inplace=True)
 
     # 3) Reconstruct trades
@@ -532,7 +532,7 @@ def run_backtest(
     entry_side: Optional[str] = None
 
     def record_trade(exit_ts: pd.Timestamp, exit_px: float) -> None:
-        # Убедимся, что entry_px не None перед расчетом
+        # Ensure entry_px is not None before calculating
         if entry_px is None:
             _logger.warning("Attempted to record trade with None entry_price.")
             return
@@ -551,70 +551,70 @@ def run_backtest(
             }
         )
 
-    # Используем fills_df, который уже отсортирован по timestamp
+    # Use fills_df which is already sorted by timestamp
     for _, row in fills_df.iterrows():
         side = str(row["order_side"]).upper()
         px, qty, ts = float(row["price"]), float(row["quantity"]), row["timestamp"]
 
-        # Пропускаем строки с нулевым количеством или ценой
+        # Skip rows with zero quantity or price
         if qty == 0.0 or px == 0.0:
             continue
 
         if side == "BUY":
             if pos_qty < 0:
-                # Закрытие части или всей короткой позиции
+                # Close part or all of a short position
                 cover = min(qty, abs(pos_qty))
                 pos_qty += cover
                 if pos_qty == 0:
-                    record_trade(ts, px)  # Полное закрытие короткой позиции
+                    record_trade(ts, px)  # Complete closing of short position
                 qty -= cover
             if qty > 0:
-                # Открытие или увеличение длинной позиции
+                # Open or increase a long position
                 if pos_qty == 0:
                     entry_px, entry_ts, entry_side = px, ts, "LONG"
                 else:
-                    # Усреднение цены входа для длинной позиции
+                    # Average entry price for a long position
                     entry_px = (
                         ((entry_px * pos_qty + px * qty) / (pos_qty + qty))
                         if entry_px is not None
                         else px
-                    )  # Убедимся, что entry_px не None
+                    )  # Ensure entry_px is not None
                 pos_qty += qty
 
         elif side == "SELL":
             if pos_qty > 0:
-                # Закрытие части или всей длинной позиции
+                # Close part or all of a long position
                 close_qty = min(qty, pos_qty)
                 pos_qty -= close_qty
                 if pos_qty == 0:
-                    record_trade(ts, px)  # Полное закрытие длинной позиции
+                    record_trade(ts, px)  # Complete closing of long position
                 qty -= close_qty
             if qty > 0:
-                # Открытие или увеличение короткой позиции
+                # Open or increase a short position
                 if pos_qty == 0:
                     entry_px, entry_ts, entry_side = px, ts, "SHORT"
                 else:
-                    # Усреднение цены входа для короткой позиции
+                    # Average entry price for a short position
                     entry_px = (
                         ((entry_px * abs(pos_qty) + px * qty) / (abs(pos_qty) + qty))
                         if entry_px is not None
                         else px
-                    )  # Убедимся, что entry_px не None
+                    )  # Ensure entry_px is not None
                 pos_qty -= qty
         else:
             _logger.warning(
                 f"Unknown order side encountered in fills: {row['order_side']}"
             )
 
-    # Закрытие оставшейся позиции в конце бэктеста
+    # Close remaining position at the end of the backtest
     if pos_qty != 0 and not price_df.empty:
         last_ts = price_df.index[-1]
         last_price = price_df["close"].iloc[-1]
-        record_trade(last_ts, last_price)  # Закрытие по последней цене бара
+        record_trade(last_ts, last_price)  # Close at the last bar price
 
     trades_df = pd.DataFrame(trades)
     if not trades_df.empty:
-        # Убедимся, что колонки времени имеют правильный тип и убираем таймзону для совместимости
+        # Ensure time columns have correct type and remove timezone for compatibility
         trades_df["entry_time"] = pd.to_datetime(
             trades_df["entry_time"]
         ).dt.tz_localize(None)
@@ -623,14 +623,14 @@ def run_backtest(
         )
 
     # 4) Build equity curve
-    # Используем PortfolioAnalyzer для более точного расчета, если доступен
-    equity_df = pd.DataFrame({"equity": []})  # Инициализация пустого DF
+    # Use PortfolioAnalyzer for more accurate calculations if available
+    equity_df = pd.DataFrame({"equity": []})  # Initialize empty DF
     ret_stats: dict = {}
     pnl_stats: dict = {}
     gen_stats: dict = {}
-    max_dd = 0.0  # Инициализация max_dd
+    max_dd = 0.0  # Initialize max_dd
 
-    # Получаем объект Trader из движка
+    # Get Trader object from engine
     trader = getattr(engine, "trader", None) or getattr(engine, "_trader", None)
 
     if trader is not None:
@@ -640,38 +640,38 @@ def run_backtest(
         if portfolio is not None and hasattr(portfolio, "analyzer"):
             try:
                 analyzer = portfolio.analyzer
-                analyzer.reset()  # Сброс анализатора перед использованием
+                analyzer.reset()  # Reset analyzer before use
 
-                # Попытка получить объект счета
+                # Try to obtain the account object
                 account_obj = None
                 try:
-                    # Предполагаем, что у трейдера есть метод get_account
+                    # Assume the trader has a get_account method
                     account_obj = trader.get_account(Venue("BINANCE"))
                 except Exception:
-                    # Fallback: ищем счета в атрибутах трейдера
+                    # Fallback: look for accounts in trader attributes
                     accounts = getattr(trader, "accounts", None)
                     if isinstance(accounts, dict):
                         account_obj = next(iter(accounts.values()), None)
                     elif isinstance(accounts, list) and accounts:
                         account_obj = accounts[0]
 
-                # Получаем позиции
+                # Obtain positions
                 positions = []
                 if hasattr(trader, "get_positions"):
                     positions = list(trader.get_positions())
                 elif hasattr(
                     portfolio, "positions"
-                ):  # Fallback: ищем позиции в портфолио
+                ):  # Fallback: Fallback: look for positions in the portfolio
                     positions = list(
                         portfolio.positions.values()
-                    )  # Предполагаем dict или list
+                    )  # Assume dict or list
 
-                # Рассчитываем статистику
+                # Calculate statistics
                 analyzer.calculate_statistics(
                     account_obj,
                     positions,
                 )
-                # Получаем кривую эквити и статистику из анализатора
+                # Get equity curve and stats from the analyzer
                 equity_df = analyzer.equity_curve().to_frame(name="equity")
                 if not equity_df.empty:
                     equity_df.index = pd.to_datetime(equity_df.index)
@@ -682,12 +682,12 @@ def run_backtest(
                 pnl_stats = analyzer.get_performance_stats_pnls()
                 gen_stats = analyzer.get_performance_stats_general()
 
-                # Пересчитываем максимальную просадку на основе кривой эквити от анализатора
+                # Recalculate max drawdown based on analyzer equity curve
                 if not equity_df.empty:
                     roll_max = equity_df.equity.cummax()
                     max_dd = (roll_max - equity_df.equity).max()
                 else:
-                    max_dd = 0.0  # Если кривая эквити пуста
+                    max_dd = 0.0  # If equity curve is empty
 
             except Exception as exc:
                 _logger.warning("PortfolioAnalyzer failed: %s", exc, exc_info=True)
@@ -713,14 +713,14 @@ def run_backtest(
                 else:
                     max_dd = 0.0
 
-    # Если PortfolioAnalyzer не был использован или не дал кривую эквити,
-    # можно добавить здесь ручной расчет как fallback, если это необходимо.
-    # В текущей версии, если анализатор не сработал, equity_df будет пустым.
+    # If PortfolioAnalyzer was not used or didn't return an equity curve,
+    # you can add manual calculations here as a fallback if needed.
+    # In the current version, if the analyzer failed, equity_df will be empty.
 
-    # Расчет метрик на основе trades_df и max_dd
+    # Calculate metrics from trades_df and max_dd
     total_profit = float(trades_df["profit"].sum()) if not trades_df.empty else 0.0
     num_trades = len(trades_df)
-    # Избегаем деления на ноль
+    # Avoid division by zero
     win_rate = (
         round((trades_df["profit"] > 0).sum() / num_trades * 100, 2)
         if num_trades > 0
@@ -771,7 +771,7 @@ def run_backtest(
 
     metrics = {
         "total_profit": round(total_profit, 2),
-        "max_drawdown": round(float(max_dd), 2),  # max_dd уже float или 0.0
+          "max_drawdown": round(float(max_dd), 2),  # max_dd already float or 0.0
         "num_trades": num_trades,
         "win_rate": win_rate,
         "profit_factor": round(float(profit_factor), 2)
@@ -786,23 +786,23 @@ def run_backtest(
         "total_dd_days": round(float(total_dd_len), 2) if not np.isnan(total_dd_len) else np.nan,
     }
 
-    # Получение комиссий
+    # Retrieve commissions
     commissions: Dict[str, float] = {}
     if trader is not None:
         try:
             account_obj = trader.get_account(Venue("BINANCE"))
             if account_obj is not None and hasattr(account_obj, "commissions"):
-                # commissions() возвращает dict[Currency, Money]
+                # commissions() returns dict[Currency, Money]
                 comms = account_obj.commissions()
-                # Конвертируем Money в float для отчета
+                # Convert Money to float for the report
                 commissions = {
                     str(k): float(v.as_double()) for k, v in comms.items()
-                }  # Используем as_double() или as_decimal()
+                  }  # Use as_double() or as_decimal()
         except Exception as exc:
             _logger.warning("Could not retrieve commissions: %s", exc)
 
-    # Подсчет ордеров и позиций
-    # fills_df['order_id'] может не существовать, используем client_order_id из контекста
+    # Counting orders and positions
+    # fills_df['order_id'] may not exist; use client_order_id from context
     orders_count = (
         fills_df["client_order_id"].nunique()
         if "client_order_id" in fills_df.columns

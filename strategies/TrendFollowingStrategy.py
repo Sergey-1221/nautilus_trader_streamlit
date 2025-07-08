@@ -9,11 +9,11 @@ from nautilus_trader.model.instruments import Instrument
 from nautilus_trader.model.enums import OrderSide, TimeInForce
 from nautilus_trader.model.orders import MarketOrder
 from nautilus_trader.trading.strategy import Strategy
-# Возможно, потребуется импорт Money, если он не доступен через model.objects
+# Import Money if it's not available via model.objects
 # from nautilus_trader.model.objects import Money
 
 
-# Индикатор ATR (Average True Range) для трейлинг-стопа
+# ATR (Average True Range) indicator for the trailing stop
 class ATRIndicator(Indicator):
     def __init__(self, period: int):
         super().__init__(params=[period])
@@ -23,7 +23,7 @@ class ATRIndicator(Indicator):
         self._last_close: Decimal | None = None
 
     def handle_bar(self, bar: Bar) -> None:
-        """Обновление ATR при поступлении нового бара."""
+        """Update ATR when a new bar arrives."""
         if not self.has_inputs:
             self._set_has_inputs(True)
 
@@ -57,7 +57,7 @@ class ATRIndicator(Indicator):
         self._last_close = None
 
 
-# Конфигурация стратегии Trend Following
+# Trend Following strategy configuration
 class TrendFollowingConfig(StrategyConfig):
     instrument_id: InstrumentId
     bar_type: BarType
@@ -68,7 +68,7 @@ class TrendFollowingConfig(StrategyConfig):
     trade_size: Decimal = Decimal("0.1")
 
 
-# Стратегия следования за трендом на основе пробоя диапазона Дончиана
+# Trend following strategy based on Donchian channel breakout
 class TrendFollowingStrategy(Strategy):
     def __init__(self, config: TrendFollowingConfig) -> None:
         super().__init__(config)
@@ -100,7 +100,7 @@ class TrendFollowingStrategy(Strategy):
 
 
     def on_bar(self, bar: Bar) -> None:
-        """Обработка каждого нового бара (исторического или реального)."""
+        """Handle each new bar (historical or real-time)."""
         if self.time_started:
             time_started_ns = int(self.time_started.timestamp() * 1_000_000_000)
             if bar.ts_event < time_started_ns:
@@ -194,18 +194,18 @@ class TrendFollowingStrategy(Strategy):
                     self.lowest_since_entry = None
 
     def on_stop(self) -> None:
-        # Отменяем все активные заявки для инструмента стратегии
+        # Cancel all active orders for the strategy instrument
         if self.instrument:
              self.cancel_all_orders(self.config.instrument_id)
 
-        # Если осталась открытая позиция, закрываем её рыночным ордером
+        # If there is an open position, close it with a market order
         if self.instrument:
             net_exposure = self.portfolio.net_exposure(self.config.instrument_id)
-            # Исправленное сравнение: используем .as_decimal() для получения Decimal значения
+            # Corrected comparison: use .as_decimal() to get a Decimal value
             if net_exposure.as_decimal() != Decimal("0"):
-                # Используем .as_decimal() для сравнения и получения значения
+                # Use .as_decimal() for comparison and value retrieval
                 side = OrderSide.SELL if net_exposure.as_decimal() > Decimal("0") else OrderSide.BUY
-                qty = self.instrument.make_qty(abs(net_exposure.as_decimal())) # Используем .as_decimal() здесь тоже
+                qty = self.instrument.make_qty(abs(net_exposure.as_decimal())) # Use .as_decimal() here as well
                 close_order: MarketOrder = self.order_factory.market(
                     instrument_id=self.config.instrument_id,
                     order_side=side,

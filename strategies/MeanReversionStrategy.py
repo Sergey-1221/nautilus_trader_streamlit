@@ -2,16 +2,16 @@ from math import sqrt
 from decimal import Decimal
 from collections import deque
 
-# Импорты из библиотеки Nautilus Trader
+# Imports from the Nautilus Trader library
 from nautilus_trader.model.data import Bar, BarType, QuoteTick, TradeTick
 from nautilus_trader.core.nautilus_pyo3 import InstrumentId
-from nautilus_trader.model.objects import Quantity # Price импортируется неявно через Bar
+from nautilus_trader.model.objects import Quantity  # Price is imported implicitly via Bar
 from nautilus_trader.model.enums import OrderSide, TimeInForce
 from nautilus_trader.model.orders import MarketOrder
 from nautilus_trader.trading.strategy import Strategy, StrategyConfig
 from nautilus_trader.indicators.base.indicator import Indicator
 
-# --- Пользовательский индикатор Bollinger Bands на Python ---
+# --- Custom Bollinger Bands indicator in Python ---
 class BollingerBandsIndicator(Indicator):
     def __init__(self, period: int, std_factor: float = 2.0):
         params = [period, std_factor]
@@ -56,7 +56,7 @@ class BollingerBandsIndicator(Indicator):
     def handle_trade_tick(self, tick: TradeTick) -> None:
         pass
 
-# --- Пользовательский индикатор RSI на Python ---
+# --- Custom RSI indicator in Python ---
 class RSIIndicator(Indicator):
     def __init__(self, period: int):
         params = [period]
@@ -123,7 +123,7 @@ class RSIIndicator(Indicator):
         pass
 
 
-# Конфигурация стратегии Mean Reversion
+# Mean Reversion strategy configuration
 class MeanReversionConfig(StrategyConfig):
     instrument_id: InstrumentId
     bar_type: BarType
@@ -134,7 +134,7 @@ class MeanReversionConfig(StrategyConfig):
     # open trades without exceeding its 10k USDT balance.
     trade_size: Decimal = Decimal("0.1")
 
-# Стратегия возврата к среднему
+# Mean Reversion strategy
 class MeanReversionStrategy(Strategy):
     def __init__(self, config: MeanReversionConfig) -> None:
         super().__init__(config)
@@ -144,17 +144,17 @@ class MeanReversionStrategy(Strategy):
         self.time_started = None
 
     def on_start(self) -> None:
-        """Подписка на данные и инициализация индикаторов при старте."""
+        """Subscribe to data and initialize indicators on start."""
         self.instrument = self.cache.instrument(self.config.instrument_id)
         if self.instrument is None:
             self.log.error(f"Instrument {self.config.instrument_id} not found")
             self.stop()
             return
 
-        # Преобразуем Timestamp, возвращаемый clock.utc_now(), в целое число наносекунд
+        # Convert the Timestamp returned by clock.utc_now() to integer nanoseconds
         self.time_started = self.clock.utc_now().value
 
-        # Регистрируем индикаторы
+        # Register indicators
         self.register_indicator_for_bars(self.config.bar_type, self.boll)
         self.register_indicator_for_bars(self.config.bar_type, self.rsi)
 
@@ -162,14 +162,14 @@ class MeanReversionStrategy(Strategy):
         self.subscribe_bars(self.config.bar_type)
 
     def on_bar(self, bar: Bar) -> None:
-        # Проверяем готовность индикаторов, используя их встроенный флаг initialized
+        # Check indicator readiness using their built-in initialized flag
         if not self.boll.initialized or not self.rsi.initialized:
             return
 
-        # Игнорируем исторические бары после прогрева, используя ts_event
+        # Ignore historical bars after warm-up using ts_event
         if self.time_started and bar.ts_event < self.time_started:
-            # Это исторический бар, который уже был использован для прогрева индикаторов.
-            # Пропускаем его для генерации торговых сигналов.
+            # This is a historical bar already used for indicator warm-up.
+            # Skip it when generating trading signals.
             return
 
         mid = self.boll.middle
@@ -187,7 +187,7 @@ class MeanReversionStrategy(Strategy):
 
         current_close_price = bar.close.as_decimal()
 
-        # === Логика входа (Entry signals) ===
+        # === Entry logic (signals) ===
         if self.position_side is None:
             if current_close_price < lower and rsi_val < Decimal("30"):
                 qty = self.instrument.make_qty(self.config.trade_size)
@@ -215,7 +215,7 @@ class MeanReversionStrategy(Strategy):
                 self.log.info(
                     f"Opened SHORT position at {current_close_price} on bar {bar.ts_event}"
                 )
-        # === Логика выхода (Exit signals) ===
+        # === Exit logic (signals) ===
         else:
             if self.position_side == 'LONG' and current_close_price >= mid:
                 qty = self.instrument.make_qty(self.config.trade_size)
@@ -245,24 +245,24 @@ class MeanReversionStrategy(Strategy):
                 self.position_side = None
 
     def on_stop(self) -> None:
-        """Очистка ресурсов при остановке стратегии."""
-        # Отменяем все активные заявки для инструмента стратегии
+        """Clean up resources when the strategy stops."""
+        # Cancel all active orders for the strategy instrument
         self.cancel_all_orders(instrument_id=self.config.instrument_id)
 
-        # Закрываем открытую позицию, если она осталась
-        # Получаем net_exposure, который может быть Money или None
+        # Close open position if any remains
+        # Get net_exposure which may be Money or None
         net_exposure_money = self.portfolio.net_exposure(self.config.instrument_id)
 
-        # Проверяем, что net_exposure_money не None И его значение в Decimal не равно нулю
+        # Ensure net_exposure_money is not None and its Decimal value is not zero
         if net_exposure_money is not None and net_exposure_money.as_decimal() != Decimal("0"):
             side = (
                 OrderSide.SELL if net_exposure_money.as_decimal() > Decimal("0") else OrderSide.BUY
             )
-            # Получаем абсолютное значение количества в Decimal
+                # Get the absolute quantity value in Decimal
             abs_qty_decimal = abs(net_exposure_money.as_decimal())
             qty = self.instrument.make_qty(abs_qty_decimal)
 
-            # Создаем и отправляем ордер на закрытие
+                # Create and submit an order to close the position
             close_order = self.order_factory.market(
                 instrument_id=self.config.instrument_id,
                 order_side=side,

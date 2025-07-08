@@ -3,15 +3,15 @@
 """
 clickhouse_instrument_provider_no_bus.py
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Инструмент‑провайдер Nautilus Trader, который создаёт объекты Instrument
-на основе метаданных из ClickHouse. **Версия без MessageBus**. Поддерживает:
-  • общий коннектор ClickHouse (+ расширенная диагностика);
-  • фабрику currency_pair_from_db();
-  • класс ClickHouseInstrumentProvider (порт адаптера);
-  • примеры использования – 4 кейса в __main__.
+Instrument provider for Nautilus Trader that creates Instrument objects
+from ClickHouse metadata. **Version without MessageBus**. Supports:
+  • a generic ClickHouse connector (with extended diagnostics);
+  • the currency_pair_from_db() factory;
+  • the ClickHouseInstrumentProvider class (adapter port);
+  • usage examples – 4 cases in ``__main__``.
 
-Зависимости
------------
+Dependencies
+------------
 pip install clickhouse-driver pandas nautilus-trader python-dotenv
 """
 
@@ -35,7 +35,7 @@ load_dotenv()
 from nautilus_trader.model import InstrumentId, Symbol, Venue
 from nautilus_trader.model.currencies import Currency
 from nautilus_trader.model.instruments import CurrencyPair
-# NB: путь к базовому классу InstrumentProvider поменялся после v1.200
+# NB: the path to the InstrumentProvider base class changed after v1.200
 from nautilus_trader.common.providers import InstrumentProvider
 from nautilus_trader.cache.cache import Cache
 
@@ -47,7 +47,7 @@ CH_DATABASE = os.getenv("CH_DATABASE")
 
 EXCHANGE_NAME_TO_ID: Dict[str, int] = {
     "BINANCE": 1,
-    # добавьте другие биржи при необходимости …
+    # add other exchanges if needed …
 }
 
 INTERVAL_STR_TO_CODE: Dict[str, int] = {
@@ -66,8 +66,8 @@ _SYMBOL_RE = re.compile(
 
 
 def parse_symbol(sym: str) -> Tuple[str, str]:
-    """Разделяет тикер Binance на базовую и котируемую валюты.
-    Если суффикс не найден – делит посередине."""
+    """Split a Binance ticker into base and quote currencies.
+    If the suffix is not found, split the string in half."""
     m = _SYMBOL_RE.match(sym)
     if m:
         return m.group(1), m.group(2)
@@ -76,8 +76,8 @@ def parse_symbol(sym: str) -> Tuple[str, str]:
 
 
 def _get_currency(code: str, module: ModuleType) -> Currency:
-    """Пытаемся взять готовый Currency из nautilus_trader.model.currencies.
-    Если валюты нет — создаём on‑the‑fly (name=iso=code, numeric=0)."""
+    """Try to get an existing Currency from nautilus_trader.model.currencies.
+    If the currency is missing, create it on-the-fly (name=iso=code, numeric=0)."""
     try:
         return getattr(module, code.upper())
     except AttributeError:
@@ -86,7 +86,7 @@ def _get_currency(code: str, module: ModuleType) -> Currency:
 
 # ─────────────────────── ClickHouse Connector ───────────────────── #
 class ClickHouseConnector:
-    """Лёгкая обёртка вокруг clickhouse-driver с расширенной диагностикой."""
+    """Lightweight wrapper around ``clickhouse-driver`` with extended diagnostics."""
 
     def __init__(
         self,
@@ -102,14 +102,14 @@ class ClickHouseConnector:
                 password=password,
                 database=database,
             )
-            self.cli.execute("SELECT 1")  # проверяем соединение
+            self.cli.execute("SELECT 1")  # verify connection
         except Exception as exc:
             raise ConnectionError(
-                f"Не удалось подключиться к ClickHouse "
+                f"Failed to connect to ClickHouse "
                 f"(host={host}, db={database}): {exc}"
             ) from exc
 
-    # ────────────────── Публичный метод: свечи ─────────────────── #
+# ────────────────── Public method: candles ─────────────────── #
     def candles(
         self,
         *,
@@ -122,13 +122,13 @@ class ClickHouseConnector:
         debug: bool = False,
         auto_clip: bool = False,
     ) -> pd.DataFrame:
-        """Возвращает DataFrame со свечами; если выборка пуста —
-        диагностирует диапазон и (опц.) подрезает к available range."""
+        """Return a DataFrame with candles; if the result set is empty,
+        diagnose the range and optionally clip to the available range."""
         exchange = exchange.upper()
         if exchange not in EXCHANGE_NAME_TO_ID:
-            raise ValueError(f"Неизвестная биржа: {exchange}")
+            raise ValueError(f"Unknown exchange: {exchange}")
         if timeframe not in INTERVAL_STR_TO_CODE:
-            raise ValueError(f"Неподдерживаемый таймфрейм: {timeframe}")
+            raise ValueError(f"Unsupported timeframe: {timeframe}")
 
         ex_id = EXCHANGE_NAME_TO_ID[exchange]
         interval_code = INTERVAL_STR_TO_CODE[timeframe]
@@ -199,7 +199,7 @@ class ClickHouseConnector:
             df[num_cols] = df[num_cols].astype("float64")
             return df
 
-        # ──────── данных нет → диагностируем min/max ─────────── #
+        # ──────── no data → diagnose min/max ─────────── #
         diag_sql = f"""
         SELECT
             min(c.open_time) AS min_time,
@@ -218,16 +218,16 @@ class ClickHouseConnector:
 
         if min_time is None:
             raise RuntimeError(
-                f"Для {symbol} на {exchange} ({mkt}) нет данных интервала "
-                f"'{timeframe}' вовсе (код {interval_code})."
+                f"No data for {symbol} on {exchange} ({mkt}) for interval "
+                f"'{timeframe}' (code {interval_code})."
             )
 
-        # Данные есть, но диапазон не совпал
+        # Data exists, but the range does not match
         if auto_clip:
             clipped_start = max(min_time, start) if start else min_time
             clipped_end = min(max_time, end) if end else max_time
             if debug:
-                print(f"⤵️  Авто-обрезка: {clipped_start} … {clipped_end}")
+                print(f"⤵️  Auto-clipping: {clipped_start} … {clipped_end}")
             return self.candles(
                 exchange=exchange,
                 symbol=symbol,
@@ -240,15 +240,15 @@ class ClickHouseConnector:
             )
 
         raise RuntimeError(
-            f"Нет строк для {symbol} {timeframe} в диапазоне "
+            f"No rows for {symbol} {timeframe} in range "
             f"{start} … {end}.\n"
-            f"В БД этот интервал закрывает:\n"
+            f"In the DB this interval covers:\n"
             f"    {min_time} … {max_time}\n"
-            f"Проверьте дату либо используйте `auto_clip=True`."
+            f"Check the date or use `auto_clip=True`."
         )
 
 
-# ─────────────── Создание CurrencyPair из БД ───────────────────── #
+# ─────────────── Create CurrencyPair from DB ───────────────────── #
 
 def currency_pair_from_db(
     ch: ClickHouseConnector,
@@ -257,7 +257,7 @@ def currency_pair_from_db(
     symbol: str,
     mkt: str = "spot",
 ) -> CurrencyPair:
-    """Читает спецификацию пары из ClickHouse и возвращает CurrencyPair."""
+"""Read pair specifications from ClickHouse and return a ``CurrencyPair``."""
     exchange_u = exchange.upper()
     base, quote = parse_symbol(symbol)
     row = ch.cli.execute(
@@ -285,7 +285,7 @@ def currency_pair_from_db(
     )
 
     if not row:
-        raise RuntimeError(f"Инструмент {symbol} {mkt} на {exchange_u} не найден.")
+        raise RuntimeError(f"Instrument {symbol} {mkt} on {exchange_u} not found.")
 
     price_digits, qty_digits, base_code, quote_code = row[0]
 
@@ -299,7 +299,7 @@ def currency_pair_from_db(
         symbol=Symbol(symbol.upper()),
         base_currency=base_cur,
         quote_currency=quote_cur,
-        price_precision=price_digits,          # int, см. релизы >= 1.200
+        price_precision=price_digits,          # int, see releases >= 1.200
         size_precision=qty_digits,             # int
         ts_init=now_ns,
         ts_event=now_ns,
@@ -308,23 +308,23 @@ def currency_pair_from_db(
 
 # ──────────────── ClickHouse InstrumentProvider ─────────────────── #
 class ClickHouseInstrumentProvider(InstrumentProvider):
-    """Адаптер‑провайдер Nautilus для загрузки инструментов из ClickHouse
-    (без поддержки MessageBus)."""
+    """Nautilus adapter provider for loading instruments from ClickHouse
+    (without MessageBus support)."""
 
     def __init__(
         self,
         connector: ClickHouseConnector,
         cache: Cache | None = None,
     ):
-        # super().__init__ принимает bus и cache; bus опускаем = None
+        # super().__init__ expects bus and cache; we omit bus (None)
         super().__init__(cache=cache)
         self._ch = connector
 
-    # Простейшая синхронная реализация; можно добавить async‑wrapper
+    # Simple synchronous implementation; an async wrapper could be added
     def load_all(self) -> None:
-        raise NotImplementedError("load_all() не реализован в примере.")
+        raise NotImplementedError("load_all() is not implemented in this example.")
 
-    # мини‑API для единичных запросов
+    # mini-API for single requests
     def currency_pair_from_db(
         self,
         *,
@@ -335,18 +335,18 @@ class ClickHouseInstrumentProvider(InstrumentProvider):
         pair = currency_pair_from_db(
             self._ch, exchange=exchange, symbol=symbol, mkt=mkt
         )
-        # публикуем лишь в Cache, если он существует; MessageBus убран
+        # publish only to Cache if it exists; MessageBus is omitted
         if self._cache is not None:
             self._cache.add_instrument(pair)
         return pair
 
 
-# ─────────────────────────── Примеры ──────────────────────────── #
+# ─────────────────────────── Examples ──────────────────────────── #
 if __name__ == "__main__":
     ch = ClickHouseConnector()
-    provider = ClickHouseInstrumentProvider(ch)  # демо без Bus/Cache
+    provider = ClickHouseInstrumentProvider(ch)  # demo without Bus/Cache
 
-    # 1) BNB/USDT: часовые свечи
+    # 1) BNB/USDT: hourly candles
     print("\n— BNB/USDT 1h —")
     start = datetime.now(timezone.utc) - timedelta(days=1)
     end = datetime.now(timezone.utc)
@@ -359,9 +359,9 @@ if __name__ == "__main__":
         auto_clip=True,
     )
     print(df.tail())
-    print(f"⏱  получено строк: {len(df)}")
+    print(f"⏱  rows received: {len(df)}")
 
-    # 2) ETH/USDT: минутки
+    # 2) ETH/USDT: one-minute candles
     print("\n— ETH/USDT 1m —")
     df_eth = ch.candles(
         exchange="BINANCE",
@@ -372,10 +372,10 @@ if __name__ == "__main__":
         auto_clip=True,
     )
     print(df_eth.tail())
-    print(f"⏱  получено строк: {len(df_eth)}")
+    print(f"⏱  rows received: {len(df_eth)}")
 
-    # 3) Диапазон, где данных нет (auto_clip=False)
-    print("\n— Пустой диапазон (ожидаем ошибку) —")
+    # 3) Range with no data (auto_clip=False)
+    print("\n— Empty range (expecting error) —")
     try:
         ch.candles(
             exchange="BINANCE",
@@ -388,8 +388,8 @@ if __name__ == "__main__":
     except RuntimeError as err:
         print("‼", err)
 
-    # 4) CurrencyPair через провайдер
-    print("\n— CurrencyPair из провайдера —")
+    # 4) CurrencyPair via provider
+    print("\n— CurrencyPair from provider —")
     pair = provider.currency_pair_from_db(
         exchange="BINANCE",
         symbol="BNBUSDT",
