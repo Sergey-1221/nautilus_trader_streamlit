@@ -456,8 +456,8 @@ def run_backtest(
     timestamp_cols = [
         c for c in fills_df.columns if "ts_" in c or c in ("timestamp", "time", "date")
     ]
-        if not timestamp_cols:
-            # If no explicit time fields, try using the index if it's datetime
+    if not timestamp_cols:
+        # If no explicit time fields, try using the index if it's datetime
         if isinstance(fills_df.index, pd.DatetimeIndex):
             fills_df["timestamp"] = fills_df.index.to_series()
         else:

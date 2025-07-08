@@ -257,7 +257,7 @@ def currency_pair_from_db(
     symbol: str,
     mkt: str = "spot",
 ) -> CurrencyPair:
-"""Read pair specifications from ClickHouse and return a ``CurrencyPair``."""
+    """Read pair specifications from ClickHouse and return a ``CurrencyPair``."""
     exchange_u = exchange.upper()
     base, quote = parse_symbol(symbol)
     row = ch.cli.execute(

@@ -27,11 +27,15 @@ NautilusTrader is a rapidly evolving open-source platform for algorithmic tradin
 ---
 
 ## 🛠️ Quick Start
-Run the app:
+Install the dependencies and run the app:
 
 ```bash
+pip install -r requirements.txt
 streamlit run app/main.py
 ```
+
+If you plan to load data from ClickHouse, create a `.env` file or set the
+environment variables `CH_HOST`, `CH_USER`, `CH_PASSWORD` and `CH_DATABASE`.
 
 ## 📈 Equity & Drawdown
 
