@@ -48,7 +48,7 @@ streamlit run app/main.py
 > ⚠️ ClickHouse integration is provided only as an example and is not guaranteed to be stable.
 ---
 
-## 🚫 Out-of-scope (Open Source Edition)
+## 🚫 Out-of-scope
 
 * Live trading dashboards and order management functionality.
 * Stable ClickHouse integration or support for remote databases (provided as experimental examples only).
